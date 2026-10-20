@@ -1,0 +1,38 @@
+# 运行时产物
+refs/*
+!refs/skills/
+refs/skills/*.jpg
+farm.log
+status.json
+ui_config.json
+STOP
+__pycache__/
+*.pyc
+.DS_Store
+
+# 编译出来的辅助程序（源码 *.swift 在仓库里，用 make_tools.sh 编译）
+adbin
+bgclick
+bgdrag
+bgdrag4
+cursor
+hold
+input
+key
+ocr
+probe
+release
+sweep
+touch
+win
+winbs
+*.app/
+
+# 失败的实验
+实验/
+bgclick.swift
+bgdrag.swift
+bgdrag4.swift
+probe.swift
+hold.swift
+app/icon.iconset/

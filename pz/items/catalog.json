@@ -1,0 +1,182 @@
+{
+ "お花": {
+  "tab": "gift",
+  "icon": "gift_00.png"
+ },
+ "葉っぱ": {
+  "tab": "gift",
+  "icon": "gift_01.png"
+ },
+ "火打ち石": {
+  "tab": "gift",
+  "icon": "gift_02.png"
+ },
+ "桃": {
+  "tab": "gift",
+  "icon": "gift_03.png"
+ },
+ "鬼のツノ": {
+  "tab": "gift",
+  "icon": "gift_04.png"
+ },
+ "木の枝": {
+  "tab": "gift",
+  "icon": "gift_05.png"
+ },
+ "卵": {
+  "tab": "gift",
+  "icon": "gift_06.png"
+ },
+ "お魚": {
+  "tab": "gift",
+  "icon": "gift_07.png"
+ },
+ "獣の牙": {
+  "tab": "gift",
+  "icon": "gift_08.png"
+ },
+ "トラの毛皮": {
+  "tab": "gift",
+  "icon": "gift_09.png"
+ },
+ "サンゴ": {
+  "tab": "gift",
+  "icon": "gift_10.png"
+ },
+ "骨付き肉": {
+  "tab": "gift",
+  "icon": "gift_11.png"
+ },
+ "粘土": {
+  "tab": "gift",
+  "icon": "gift_12.png"
+ },
+ "お米": {
+  "tab": "gift",
+  "icon": "gift_13.png"
+ },
+ "鉄": {
+  "tab": "gift",
+  "icon": "gift_14.png"
+ },
+ "昆布": {
+  "tab": "gift",
+  "icon": "gift_15.png"
+ },
+ "ふさふさの毛": {
+  "tab": "gift",
+  "icon": "gift_16.png"
+ },
+ "大豆": {
+  "tab": "gift",
+  "icon": "gift_17.png"
+ },
+ "麦": {
+  "tab": "gift",
+  "icon": "gift_18.png"
+ },
+ "サイコロ": {
+  "tab": "gift",
+  "icon": "gift_22.png"
+ },
+ "油": {
+  "tab": "gift",
+  "icon": "gift_23.png"
+ },
+ "塩": {
+  "tab": "gift",
+  "icon": "gift_24.png"
+ },
+ "真珠貝": {
+  "tab": "gift",
+  "icon": "gift_25.png"
+ },
+ "カニのはさみ": {
+  "tab": "gift",
+  "icon": "gift_26.png"
+ },
+ "ウロコ": {
+  "tab": "gift",
+  "icon": "gift_27.png"
+ },
+ "ネジ": {
+  "tab": "gift",
+  "icon": "gift_28.png"
+ },
+ "二色おはぎ": {
+  "tab": "gift",
+  "icon": "gift_29.png"
+ },
+ "筆": {
+  "tab": "gift",
+  "icon": "gift_30.png"
+ },
+ "紙": {
+  "tab": "gift",
+  "icon": "gift_31.png"
+ },
+ "そろばん": {
+  "tab": "gift",
+  "icon": "gift_32.png"
+ },
+ "みかげ石": {
+  "tab": "gift",
+  "icon": "gift_33.png"
+ },
+ "ろうそく": {
+  "tab": "gift",
+  "icon": "gift_34.png"
+ },
+ "手旗": {
+  "tab": "gift",
+  "icon": "gift_35.png"
+ },
+ "羽衣": {
+  "tab": "gift",
+  "icon": "gift_36.png"
+ },
+ "囲碁": {
+  "tab": "gift",
+  "icon": "gift_37.png"
+ },
+ "赤の絵具": {
+  "tab": "gift",
+  "icon": "gift_38.png"
+ },
+ "青の絵具": {
+  "tab": "gift",
+  "icon": "gift_39.png"
+ },
+ "黄の絵具": {
+  "tab": "gift",
+  "icon": "gift_40.png"
+ },
+ "太刀の心得": {
+  "tab": "gift",
+  "icon": "gift_41.png"
+ },
+ "水": {
+  "tab": "gift",
+  "icon": "gift_water.png"
+ },
+ "経験値の書・小": {
+  "tab": "item",
+  "icon": "item_00.png"
+ },
+ "経験値の書・中": {
+  "tab": "item",
+  "icon": "item_01.png"
+ },
+ "絵馬経験値の勾玉・小": {
+  "tab": "item",
+  "icon": "item_02.png"
+ },
+ "絵馬経験値の勾玉・中": {
+  "tab": "item",
+  "icon": "item_03.png"
+ },
+ "絵馬": {
+  "tab": "ema",
+  "icon": "ema_00.png"
+ }
+}
