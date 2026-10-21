@@ -34,7 +34,10 @@ def whitened_same_color(before, during, bubbles, color, skip=()):
         drop = (a[ys, xs, 1] - b[ys, xs, 1]).mean()
         if c == 'black':
             drop = (b[ys, xs, 2] - a[ys, xs, 2]).mean()      # 黑色泡泡发白 = 变亮
-        if drop > 12:          # 实测：发白的同色 14~22，不相关的 ≈0
+        # 发白主要在身体边缘和角（中间的眼睛、嘴不变）：整个泡泡里「淡白色像素」比按下前多了多少
+        # 实测：发白的大多 >0.15；别的颜色被选中泡泡的光晃到偶尔 >0.06，所以取 0.10
+        wr = lambda h: ((h[y - 30:y + 50, x - 40:x + 40, 1] < 100) & (h[y - 30:y + 50, x - 40:x + 40, 2] > 200)).mean()
+        if drop > 12 or wr(b) - wr(a) > 0.10:          # 实测：发白的同色 14~22，不相关的 ≈0
             out.append(p)
     return out
 
