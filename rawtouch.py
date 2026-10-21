@@ -45,11 +45,11 @@ class RawTouch:
             self.p.kill()
 
 
-def path(pts, step=30, dt=0.008, hold=0.05):
+def path(pts, step=30, dt=0.008, hold=0.05, first=0.03):
     """按下 → 沿 pts 每 step 像素一个点、每点间隔 dt 秒 → 松开（pts 为安卓像素）"""
     import math
     t = RawTouch()
-    t.down(*pts[0]); time.sleep(0.03)
+    t.down(*pts[0]); time.sleep(first)
     cur = pts[0]
     for p in pts[1:]:
         n = max(1, int(math.dist(cur, p) / step))

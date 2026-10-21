@@ -111,4 +111,5 @@ if __name__ == '__main__':
         if cmd == 'path':
             rawtouch.path(apts, step=30, dt=0.010, hold=0.12)    # 连线 / 拖地图
         else:
-            rawtouch.path(apts, step=40, dt=0.006, hold=0.04)    # 乱舞横扫
+            # 乱舞横扫：起点要按住一会儿，否则游戏还没认到起点就滑到旁边别的颜色上，扫成了别的色
+            rawtouch.path(apts, step=40, dt=0.006, hold=0.04, first=0.15)
