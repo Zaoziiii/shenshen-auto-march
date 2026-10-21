@@ -399,10 +399,15 @@ def selected_flags(before, during, pts):
     return out
 
 
+LAST_DURING = None                               # 最近一次松手前核对的截图
+
+
 def _broken_at(img, pts):
     """松手前判定（用户）：计划的个数 和 游戏显示的连接数 对不对得上。
     返回 k（只连上前 k 个）或 None（对上了 / 判断不了）。每次都写日志。"""
+    global LAST_DURING
     during = shot()
+    LAST_DURING = during
     n = len(pts)
     c = count.read_count(during)
     flags = selected_flags(img, during, pts)
@@ -429,7 +434,7 @@ def region_neighbors(region, seed):
     """游戏说发白区域里的同色泡泡互相连通（实测相邻眼睛距离可到 ~150px），
     所以从 120px 开始逐步放宽，取「刚好能把整片连起来」的最小距离（最多 180px）"""
     old = solver.LINK
-    for L in range(120, 157, 6):               # 再远游戏就拖不过去了（断链多半是这种远距离连接）
+    for L in range(120, 185, 6):
         solver.LINK = L; nb = solver.neighbors(region)
         seen, st = set(seed), list(seed)
         while st:
@@ -514,6 +519,31 @@ def replan_by_white(t, img, b, pts, k):
     return t, [region[q][:2] for q in best]
 
 
+def extend_whitened(t, img, b, pts, reach=185, limit=8):
+    """用户：游戏里已经发白的泡泡（= 能连上的）脚本也要连上。连完计划后先不松手：
+    看核对时那张截图，链尾附近还有没连上的发白同色泡泡，就一个一个接上去（最近的优先），
+    每接一个读一次计数确认；接不上就退回链尾，换下一个。"""
+    c = next((p[2] for p in b if math.dist(p[:2], pts[0]) < 30), None)
+    if not c:
+        return pts
+    tried = set()
+    for _ in range(limit):
+        white = [p[:2] for p in whiten.whitened_same_color(img, LAST_DURING, b, c, skip=pts)]
+        cand = [q for q in white if q not in tried and math.dist(q, pts[-1]) <= reach]
+        if not cand:
+            break
+        q = min(cand, key=lambda q: math.dist(q, pts[-1]))
+        tried.add(q)
+        t.slow(q[0], q[1] + 20)
+        time.sleep(0.15)
+        if _broken_at(img, pts + [q]) is None:
+            pts = pts + [q]
+            print(f'{time.time():.1f}', f'extend by white: +1 -> {len(pts)}', flush=True)
+        else:
+            t.slow(pts[-1][0], pts[-1][1] + 20)       # 没接上：回到链尾
+    return pts
+
+
 def finish_verified(t, img, pts, b=None):
     """用户：松手前确认计划的泡泡都连上了，没连全不松手。
     计数比计划少时先等一下再读（BlueStacks 输入有延迟，游戏可能还没处理完最后几步）；
@@ -538,7 +568,10 @@ def finish_verified(t, img, pts, b=None):
         k = _broken_at(img, pts)
         if k:
             print(f'{time.time():.1f}', f'redo still {k}/{len(pts)}, releasing as is', flush=True)
+    if not k and b is not None:
+        pts = extend_whitened(t, img, b, pts)
     t.up()
+    return pts
 
 
 def chain_with_rescan(img, b, ch):
