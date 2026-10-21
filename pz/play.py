@@ -453,11 +453,13 @@ def extend_from(region, prefix, nb, budget=20000):
 
 
 def replan_by_white(t, img, b, pts, k):
-    """用户：没连完不松手，按发白区域重新规划。手指退回到最后一个连上的泡泡（已选 pts[:k]），
-    截图看哪些同色泡泡发白 = 游戏认为能连上的；断掉的那条连接不再走，
-    在「已选前缀 + 发白泡泡」里找最长路径（可以再往回退几个换条路），按新路径慢慢接上。返回新路径。"""
-    for x, y in reversed(pts[k - 1:]):
-        t.slow(x, y + 20)
+    """用户：没连完按发白区域重新规划。手指移到最后一个连上的泡泡（已选 pts[:k]），截图看哪些同色泡泡发白
+    = 游戏认为能连上的；断掉的那条连接不再走，在「已选 + 发白」里找最长路径：
+      - 最长路径能接着已选的前缀走：不松手，退到分叉点接着连
+      - 最长路径要换起点（原起点在链中间）：退回起点只剩 1 个松手（不算出手），从新起点重连
+    返回 (触摸, 新路径)。"""
+    x, y = pts[k - 1]
+    t.slow(x, y + 20)
     time.sleep(0.3)
     during = shot()
     c = next((p[2] for p in b if math.dist(p[:2], pts[0]) < 30), None)
@@ -467,20 +469,36 @@ def replan_by_white(t, img, b, pts, k):
     bad = next((i for i, p in enumerate(region) if i >= k and k < len(pts) and math.dist(p[:2], pts[k]) < 30), None)
     if bad is not None:                         # 断掉的那一步：不再走
         nb[k - 1] = [j for j in nb[k - 1] if j != bad]; nb[bad] = [j for j in nb[bad] if j != k - 1]
-    best = list(range(k))
-    for j in range(k, 1, -1):                   # 前缀越长越少退；同样长度优先少退
+    hold = list(range(k))
+    for j in range(k, 1, -1):                   # 接着已选前缀走；同样长度优先少退
         cand = extend_from(region, list(range(j)), nb)
-        if len(cand) > len(best):
-            best = cand
-    print(f'{time.time():.1f}', f'replan by white: connected {k}, white {len(white)}, new path {len(best)} (link {L})', flush=True)
-    if len(best) <= k:
-        return pts[:k]
-    j = next((i for i, q in enumerate(best) if q != i), len(best))   # 前 j 个和已选的一样
+        if len(cand) > len(hold):
+            hold = cand
+    anew = []
+    for s0 in range(len(region)):               # 任意起点
+        cand = solver.longest_from(region, s0, nb)
+        if len(cand) > len(anew):
+            anew = cand
+    print(f'{time.time():.1f}', f'replan by white: connected {k}, white {len(white)}, '
+          f'hold path {len(hold)}, any-start path {len(anew)} (link {L})', flush=True)
+    if len(anew) > len(hold) and len(anew) > k:
+        for x, y in reversed(pts[:k - 1]):      # 退回起点：只剩 1 个，松手不算出手
+            t.slow(x, y + 20)
+        time.sleep(0.15)
+        t.up(); time.sleep(0.4)
+        t = touch.Touch()
+        t.down(region[anew[0]][0], region[anew[0]][1] + 20)
+        for q in anew[1:]:
+            t.slow(region[q][0], region[q][1] + 20)
+        return t, [region[q][:2] for q in anew]
+    if len(hold) <= k:
+        return t, pts[:k]
+    j = next((i for i, q in enumerate(hold) if q != i), len(hold))   # 前 j 个和已选的一样
     for x, y in reversed(pts[j - 1:k]):         # 退回到分叉点（经过的已选泡泡依次取消）
         t.slow(x, y + 20)
-    for q in best[j:]:
+    for q in hold[j:]:
         t.slow(region[q][0], region[q][1] + 20)
-    return [region[q][:2] for q in best]
+    return t, [region[q][:2] for q in hold]
 
 
 def finish_verified(t, img, pts, b=None):
@@ -491,7 +509,7 @@ def finish_verified(t, img, pts, b=None):
     if k:
         if b is not None and k >= 2:
             print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, replan by white (holding)', flush=True)
-            pts = replan_by_white(t, img, b, pts, k)
+            t, pts = replan_by_white(t, img, b, pts, k)
         else:
             print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start (holding) and redo', flush=True)
             for x, y in reversed(pts[:k]):          # 反向退回：经过的已选泡泡会依次取消
