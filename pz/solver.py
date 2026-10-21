@@ -4,7 +4,7 @@ import math
 LINK = 112
 # 当前盘面的障碍物（play 每回合设置）：{'shell': [(x, y)], 'box': [(x, y)]}
 OBST = {}
-SHELL_BONUS, BOX_PENALTY = 1, 1        # 用户要长链优先：只在差不多长时起作用
+SHELL_BONUS, BOX_PENALTY = 0, 0        # 用户（2026-10-22）：贝壳、箱子不加减分
 
 
 def obst_score(bubbles, ch):
