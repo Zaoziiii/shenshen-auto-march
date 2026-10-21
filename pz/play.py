@@ -3,7 +3,7 @@ import math, subprocess, sys, time
 from pathlib import Path
 import cv2, numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
-import board, solver, bombs, whiten, touch, count
+import board, solver, bombs, whiten, touch, count, obstacles
 
 TEAM = []            # chars.identify() 的结果：3 个角色的奥义信息（farm 设置）
 RESULT_IMGS = []     # 本局结算页截图（farm 读掉落用）
@@ -307,7 +307,7 @@ def zigzag_sweep(x0, y0):
 
 
 HUE_OK = {'red': lambda h: h <= 12 or h >= 160, 'yellow': lambda h: 13 <= h <= 32,
-          'green': lambda h: 36 <= h <= 82, 'blue': lambda h: 84 <= h <= 120}
+          'green': lambda h: 36 <= h <= 82, 'blue': lambda h: 84 <= h <= 120, 'black': lambda h: True}
 
 
 def stable_start(b, c, keep, img, strict=True):
@@ -386,7 +386,7 @@ def selected_flags(before, during, pts):
     out = []
     for x, y in pts:
         ys, xs = slice(y + 8, y + 42), slice(x - 22, x + 22)
-        drop = (a[ys, xs, 1] - d[ys, xs, 1]).mean()
+        drop = max((a[ys, xs, 1] - d[ys, xs, 1]).mean(), (d[ys, xs, 2] - a[ys, xs, 2]).mean())   # 变淡 / 黑色变亮
         cy, cx = slice(y + 12, y + 36), slice(x - 12, x + 12)
         wa = ((a[cy, cx, 1] < 60) & (a[cy, cx, 2] > 235)).mean()
         wd = ((d[cy, cx, 1] < 60) & (d[cy, cx, 2] > 235)).mean()
@@ -774,6 +774,9 @@ def run(max_moves=120, prefer=(), max_minutes=20):
         # 用户：优先消队伍角色奥义需要的颜色（奥义已经亮了的角色不用再攒）
         need = tuple(c for i, c in enumerate(sakura_colors(img)) if c and i not in ready_now)
         # 用户：三个角色都不需要的颜色，只有能连 ≥7 个（生成炸弹）才连；否则只连能补奥义的颜色
+        solver.OBST = obstacles.detect(img)
+        if any(solver.OBST.values()):
+            print(f'{time.time():.1f}', n, 'obstacles', {k: v for k, v in solver.OBST.items() if v}, flush=True)
         ch = solver.best_chain_team(b, set(need)) if need else solver.best_chain(b, prefer)
         n_flame = sum(1 for p in b if p[4])
         if not n_flame:

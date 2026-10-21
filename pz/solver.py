@@ -2,6 +2,16 @@
 import math
 
 LINK = 112
+# 当前盘面的障碍物（play 每回合设置）：{'shell': [(x, y)], 'box': [(x, y)]}
+OBST = {}
+SHELL_BONUS, BOX_PENALTY = 3, 4
+
+
+def obst_score(bubbles, ch):
+    """用户：贝壳旁边消除 → 变随机道具（加分）；箱子旁边消除 → 变出 5 个黑色泡泡（扣分）"""
+    import obstacles
+    near = lambda pts: sum(1 for p in pts if any(obstacles.touching(bubbles[i], [p]) for i in ch))
+    return SHELL_BONUS * near(OBST.get('shell', [])) - BOX_PENALTY * near(OBST.get('box', []))
 
 
 def neighbors(bubbles):
@@ -72,7 +82,7 @@ def best_chain(bubbles, prefer=(), prefer_mult=1.3, flame_bonus=8):
         if len(ch) < 2:
             continue
         c = bubbles[ch[0]][2]
-        s = len(ch) * (prefer_mult if c in prefer else 1) + flame_bonus * sum(1 for i in ch if bubbles[i][4])
+        s = len(ch) * (prefer_mult if c in prefer else 1) + flame_bonus * sum(1 for i in ch if bubbles[i][4]) + obst_score(bubbles, ch)
         if s > best_s:
             best, best_s = ch, s
     return best
@@ -121,6 +131,7 @@ def best_chain_team(bubbles, need, bomb_len=7):
     - 两边都没有合格的链时，退回到任意颜色的最长链（总得走一步）"""
     if not need:
         return best_chain(bubbles)
+    need = set(need) | {'black'}           # 用户：箱子变出来的黑色泡泡也要消，不限 7 个
     best, best_s = [], -1
     for c in {b[2] for b in bubbles}:
         ch = longest_chain(bubbles, budget=40000, color=c)
@@ -128,7 +139,7 @@ def best_chain_team(bubbles, need, bomb_len=7):
             continue
         if c not in need and len(ch) < bomb_len:
             continue
-        s = len(ch) + 8 * sum(1 for i in ch if bubbles[i][4])
+        s = len(ch) + 8 * sum(1 for i in ch if bubbles[i][4]) + obst_score(bubbles, ch)
         if s > best_s:
             best, best_s = ch, s
     return best or best_chain(bubbles)

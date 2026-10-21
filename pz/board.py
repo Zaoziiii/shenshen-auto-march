@@ -46,7 +46,7 @@ def detect(img, templates=None):
     return kept
 
 
-BGR = {'red': (0, 0, 255), 'yellow': (0, 220, 255), 'green': (0, 200, 0), 'blue': (255, 120, 0)}
+BGR = {'red': (0, 0, 255), 'yellow': (0, 220, 255), 'green': (0, 200, 0), 'blue': (255, 120, 0), 'black': (60, 60, 60)}
 
 
 def draw(img, bubbles, path=None):

@@ -32,12 +32,14 @@ def whitened_same_color(before, during, bubbles, color, skip=()):
             continue
         ys, xs = slice(y + 8, y + 42), slice(x - 22, x + 22)
         drop = (a[ys, xs, 1] - b[ys, xs, 1]).mean()
+        if c == 'black':
+            drop = (b[ys, xs, 2] - a[ys, xs, 2]).mean()      # 黑色泡泡发白 = 变亮
         if drop > 12:          # 实测：发白的同色 14~22，不相关的 ≈0
             out.append(p)
     return out
 
 
-HUE = {'red': [(0, 12), (160, 179)], 'yellow': [(13, 32)], 'green': [(36, 82)], 'blue': [(84, 120)]}
+HUE = {'red': [(0, 12), (160, 179)], 'yellow': [(13, 32)], 'green': [(36, 82)], 'blue': [(84, 120)], 'black': []}
 
 
 def whitened_near_bombs(before, during, color, bombs, known, pad=110):

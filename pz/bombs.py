@@ -31,6 +31,9 @@ def detect(img, bubbles):
     for d, x, y in cands:
         if all((x - a) ** 2 + (y - b) ** 2 > (d + 25) ** 2 for a, b, _ in centers):
             centers.append((int(x), int(y), float(d)))
+    import obstacles                         # 贝壳、箱子不是炸弹
+    obst = obstacles.all_points(obstacles.detect(img))
+    centers = [c for c in centers if all((c[0] - a) ** 2 + (c[1] - b) ** 2 > 55 ** 2 for a, b in obst)]
     out = []
     for x, y, d in centers:
         r = int(d)

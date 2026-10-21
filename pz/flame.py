@@ -35,9 +35,10 @@ def detect(img):
 def body_color(hsv, x, y):
     """眼睛下方 18~46px、左右各 24px 的身体像素（排除紫色火焰、白色、暗部）"""
     r = hsv[y + 18:y + 46, x - 24:x + 24].reshape(-1, 3)
+    dark = ((r[:, 2] >= 30) & (r[:, 2] < 115) & (r[:, 1] < 120)).sum()   # 黑色泡泡（箱子变出来的）
     r = r[(r[:, 1] > 90) & (r[:, 2] > 120) & ~((r[:, 0] >= 118) & (r[:, 0] <= 158))]
     if len(r) < 60:
-        return None
+        return 'black' if dark >= 400 else None
     hh = r[:, 0]
     votes = {
         'red': ((hh <= 12) | (hh >= 159)).sum(),
