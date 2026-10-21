@@ -213,7 +213,12 @@ def is_rush(img):
         return False
     # 还要有右上角紫色倒计时圆环（排除奥义特写动画：背景同样五颜六色）
     t = cv2.cvtColor(img[360:480, 520:650], cv2.COLOR_BGR2HSV)
-    return (((t[..., 0] >= 130) & (t[..., 0] <= 165)) & (t[..., 1] > 120) & (t[..., 2] > 150)).mean() > 0.2
+    if (((t[..., 0] >= 130) & (t[..., 0] <= 165)) & (t[..., 1] > 120) & (t[..., 2] > 150)).mean() <= 0.2:
+        return False
+    # 3-35 的首领身上的紫光也在这个位置：再找倒计时的圆环（圆心约 (580, 421)，半径 ~57）
+    g = cv2.medianBlur(cv2.cvtColor(img[340:500, 480:680], cv2.COLOR_BGR2GRAY), 5)
+    c = cv2.HoughCircles(g, cv2.HOUGH_GRADIENT, dp=1.2, minDist=100, param1=100, param2=40, minRadius=40, maxRadius=62)
+    return c is not None and any(abs(x + 480 - 580) < 18 and abs(y + 340 - 421) < 18 and r >= 50 for x, y, r in c[0])
 
 
 def sweep_order(pts):
@@ -453,71 +458,79 @@ def extend_from(region, prefix, nb, budget=20000):
 
 
 def replan_by_white(t, img, b, pts, k):
-    """用户：没连完按发白区域重新规划。手指移到最后一个连上的泡泡（已选 pts[:k]），截图看哪些同色泡泡发白
-    = 游戏认为能连上的；断掉的那条连接不再走，在「已选 + 发白」里找最长路径：
-      - 最长路径能接着已选的前缀走：不松手，退到分叉点接着连
-      - 最长路径要换起点（原起点在链中间）：退回起点只剩 1 个松手（不算出手），从新起点重连
+    """连线断在第 k 个（已选 pts[:k]），手指不松开，重新规划。原则（用户）：最大化连接长度，
+    新路径绝不比原计划短。候选：
+      - 原计划：从断点慢慢接着连（可能只是拖太快漏掉了）
+      - 接着已选前缀走、避开断掉那一步的最长路径（可以往回退几个换条路）
+      - 换起点的最长路径（原起点在链中间时；退回起点只剩 1 个松手，不算出手）
+    区域 = 原计划的泡泡 + 现在发白的同色泡泡。先比长度；一样长时：不走断掉那一步 > 不松手 > 少退。
     返回 (触摸, 新路径)。"""
     x, y = pts[k - 1]
     t.slow(x, y + 20)
     time.sleep(0.3)
     during = shot()
     c = next((p[2] for p in b if math.dist(p[:2], pts[0]) < 30), None)
-    white = whiten.whitened_same_color(img, during, b, c, skip=pts[:k]) if c else []
-    region = [(x, y, c, 0.0, False) for x, y in pts[:k]] + list(white)
+    flame_at = lambda q: any(p[4] for p in b if math.dist(p[:2], q) < 30)
+    region = [(x, y, c, 0.0, flame_at((x, y))) for x, y in pts]
+    white = whiten.whitened_same_color(img, during, b, c, skip=pts) if c else []
+    region += [p for p in white if all(math.dist(p[:2], q) > 30 for q in pts)]
+    n = len(pts)
     nb, L = region_neighbors(region, range(k))
-    bad = next((i for i, p in enumerate(region) if i >= k and k < len(pts) and math.dist(p[:2], pts[k]) < 30), None)
-    if bad is not None:                         # 断掉的那一步：不再走
-        nb[k - 1] = [j for j in nb[k - 1] if j != bad]; nb[bad] = [j for j in nb[bad] if j != k - 1]
-    hold = list(range(k))
-    for j in range(k, 1, -1):                   # 接着已选前缀走；同样长度优先少退
-        cand = extend_from(region, list(range(j)), nb)
-        if len(cand) > len(hold):
-            hold = cand
-    anew = []
-    for s0 in range(len(region)):               # 任意起点
-        cand = solver.longest_from(region, s0, nb)
-        if len(cand) > len(anew):
-            anew = cand
-    print(f'{time.time():.1f}', f'replan by white: connected {k}, white {len(white)}, '
-          f'hold path {len(hold)}, any-start path {len(anew)} (link {L})', flush=True)
-    if len(anew) > len(hold) and len(anew) > k:
+    for i in range(n - 1):                      # 原计划的每一步都算相邻（距离可能超过 L）
+        if i + 1 not in nb[i]:
+            nb[i].append(i + 1); nb[i + 1].append(i)
+    if k < n:                                   # 断掉的那一步
+        nb[k - 1] = [j for j in nb[k - 1] if j != k]; nb[k] = [j for j in nb[k] if j != k - 1]
+    cands = [(n, False, True, k, 'retry', list(range(n)))]     # (长度, 不走断点, 不松手, 已选保留数, 名字, 路径)
+    for j in range(k, 1, -1):
+        p2 = extend_from(region, list(range(j)), nb)
+        cands.append((len(p2), True, True, j, 'hold', p2))
+    for s0 in range(len(region)):
+        p2 = solver.longest_from(region, s0, nb)
+        cands.append((len(p2), True, False, 0, 'restart', p2))
+    ln, _, _, j, how, best = max(cands, key=lambda c: c[:4])
+    print(f'{time.time():.1f}', f'replan by white: connected {k}/{n}, white {len(white)}, '
+          f'pick {how} {ln} (link {L})', flush=True)
+    if how == 'restart':
         for x, y in reversed(pts[:k - 1]):      # 退回起点：只剩 1 个，松手不算出手
             t.slow(x, y + 20)
         time.sleep(0.15)
         t.up(); time.sleep(0.4)
         t = touch.Touch()
-        t.down(region[anew[0]][0], region[anew[0]][1] + 20)
-        for q in anew[1:]:
-            t.slow(region[q][0], region[q][1] + 20)
-        return t, [region[q][:2] for q in anew]
-    if len(hold) <= k:
-        return t, pts[:k]
-    j = next((i for i, q in enumerate(hold) if q != i), len(hold))   # 前 j 个和已选的一样
-    for x, y in reversed(pts[j - 1:k]):         # 退回到分叉点（经过的已选泡泡依次取消）
-        t.slow(x, y + 20)
-    for q in hold[j:]:
+        t.down(region[best[0]][0], region[best[0]][1] + 20)
+        rest = best[1:]
+    else:
+        j = next((i for i, q in enumerate(best) if q != i), len(best))   # 前 j 个和已选的一样
+        j = min(j, k)
+        for x, y in reversed(pts[j - 1:k]):     # 退回到分叉点（经过的已选泡泡依次取消）
+            t.slow(x, y + 20)
+        rest = best[j:]
+    for q in rest:
         t.slow(region[q][0], region[q][1] + 20)
-    return t, [region[q][:2] for q in hold]
+    return t, [region[q][:2] for q in best]
 
 
 def finish_verified(t, img, pts, b=None):
-    """用户：松手前确认计划的泡泡都连上了。没连全（卡了一下漏掉）就不松手：
-    已连上 ≥2 个时按发白区域重新规划接着连；否则沿原路退回起点再慢慢重连。只补一次，还不全就照现状松手。"""
+    """用户：松手前确认计划的泡泡都连上了，没连全不松手。
+    计数比计划少时先等一下再读（BlueStacks 输入有延迟，游戏可能还没处理完最后几步）；
+    确实断了：已连上 ≥2 个按 replan_by_white 重新规划（不会比原计划短）；只连上 1 个就退回起点慢慢重连。
+    只补一次，还不全就照现状松手。"""
     time.sleep(0.12)
     k = _broken_at(img, pts)
     if k:
+        time.sleep(0.3)
+        k = _broken_at(img, pts)
+    if k:
         if b is not None and k >= 2:
-            print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, replan by white (holding)', flush=True)
             t, pts = replan_by_white(t, img, b, pts, k)
         else:
             print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start (holding) and redo', flush=True)
-            for x, y in reversed(pts[:k]):          # 反向退回：经过的已选泡泡会依次取消
+            for x, y in reversed(pts[:k]):
                 t.slow(x, y + 20)
             time.sleep(0.2)
             for x, y in pts[1:]:
                 t.slow(x, y + 20)
-        time.sleep(0.12)
+        time.sleep(0.3)
         k = _broken_at(img, pts)
         if k:
             print(f'{time.time():.1f}', f'redo still {k}/{len(pts)}, releasing as is', flush=True)
