@@ -416,24 +416,93 @@ def _broken_at(img, pts):
     return verdict if verdict and 0 < verdict < n else None
 
 
-def finish_verified(t, img, pts):
-    """用户：松手前确认计划的泡泡都连上了。没连全（卡了一下漏掉）就不松手，沿原路反向退回到起点
-    （经过的已选泡泡依次取消），再从起点慢慢重连；只重连 1 遍，还不全就照现状松手。"""
+def region_neighbors(region, seed):
+    """游戏说发白区域里的同色泡泡互相连通（实测相邻眼睛距离可到 ~150px），
+    所以从 120px 开始逐步放宽，取「刚好能把整片连起来」的最小距离（最多 180px）"""
+    old = solver.LINK
+    for L in range(120, 185, 6):
+        solver.LINK = L; nb = solver.neighbors(region)
+        seen, st = set(seed), list(seed)
+        while st:
+            q = st.pop()
+            for j in nb[q]:
+                if j not in seen:
+                    seen.add(j); st.append(j)
+        if len(seen) == len(region):
+            break
+    solver.LINK = old
+    return nb, L
+
+
+def extend_from(region, prefix, nb, budget=20000):
+    """固定前缀（已选中的泡泡下标）往后接最长的路径；优先经过火焰泡泡"""
+    best = prefix[:]; steps = 0
+    key = lambda p: (sum(1 for i in p if region[i][4]), len(p))
+    def dfs(path, seen):
+        nonlocal best, steps
+        steps += 1
+        if key(path) > key(best):
+            best = path[:]
+        if steps > budget:
+            return
+        for j in sorted(nb[path[-1]], key=lambda q: (not region[q][4], len(nb[q]))):
+            if j not in seen:
+                seen.add(j); path.append(j); dfs(path, seen); path.pop(); seen.discard(j)
+    dfs(prefix[:], set(prefix))
+    return best
+
+
+def replan_by_white(t, img, b, pts, k):
+    """用户：没连完不松手，按发白区域重新规划。手指退回到最后一个连上的泡泡（已选 pts[:k]），
+    截图看哪些同色泡泡发白 = 游戏认为能连上的；断掉的那条连接不再走，
+    在「已选前缀 + 发白泡泡」里找最长路径（可以再往回退几个换条路），按新路径慢慢接上。返回新路径。"""
+    for x, y in reversed(pts[k - 1:]):
+        t.slow(x, y + 20)
+    time.sleep(0.3)
+    during = shot()
+    c = next((p[2] for p in b if math.dist(p[:2], pts[0]) < 30), None)
+    white = whiten.whitened_same_color(img, during, b, c, skip=pts[:k]) if c else []
+    region = [(x, y, c, 0.0, False) for x, y in pts[:k]] + list(white)
+    nb, L = region_neighbors(region, range(k))
+    bad = next((i for i, p in enumerate(region) if i >= k and k < len(pts) and math.dist(p[:2], pts[k]) < 30), None)
+    if bad is not None:                         # 断掉的那一步：不再走
+        nb[k - 1] = [j for j in nb[k - 1] if j != bad]; nb[bad] = [j for j in nb[bad] if j != k - 1]
+    best = list(range(k))
+    for j in range(k, 1, -1):                   # 前缀越长越少退；同样长度优先少退
+        cand = extend_from(region, list(range(j)), nb)
+        if len(cand) > len(best):
+            best = cand
+    print(f'{time.time():.1f}', f'replan by white: connected {k}, white {len(white)}, new path {len(best)} (link {L})', flush=True)
+    if len(best) <= k:
+        return pts[:k]
+    j = next((i for i, q in enumerate(best) if q != i), len(best))   # 前 j 个和已选的一样
+    for x, y in reversed(pts[j - 1:k]):         # 退回到分叉点（经过的已选泡泡依次取消）
+        t.slow(x, y + 20)
+    for q in best[j:]:
+        t.slow(region[q][0], region[q][1] + 20)
+    return [region[q][:2] for q in best]
+
+
+def finish_verified(t, img, pts, b=None):
+    """用户：松手前确认计划的泡泡都连上了。没连全（卡了一下漏掉）就不松手：
+    已连上 ≥2 个时按发白区域重新规划接着连；否则沿原路退回起点再慢慢重连。只补一次，还不全就照现状松手。"""
     time.sleep(0.12)
     k = _broken_at(img, pts)
-    for tries in range(1, 2):
-        if not k:
-            break
-        print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start (holding) and redo #{tries}', flush=True)
-        for x, y in reversed(pts[:k]):              # 反向退回：经过的已选泡泡会依次取消
-            t.slow(x, y + 20)
-        time.sleep(0.2 * tries)
-        for x, y in pts[1:]:
-            t.slow(x, y + 20)
+    if k:
+        if b is not None and k >= 2:
+            print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, replan by white (holding)', flush=True)
+            pts = replan_by_white(t, img, b, pts, k)
+        else:
+            print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start (holding) and redo', flush=True)
+            for x, y in reversed(pts[:k]):          # 反向退回：经过的已选泡泡会依次取消
+                t.slow(x, y + 20)
+            time.sleep(0.2)
+            for x, y in pts[1:]:
+                t.slow(x, y + 20)
         time.sleep(0.12)
         k = _broken_at(img, pts)
-    if k:
-        print(f'{time.time():.1f}', f'redo still {k}/{len(pts)}, releasing as is', flush=True)
+        if k:
+            print(f'{time.time():.1f}', f'redo still {k}/{len(pts)}, releasing as is', flush=True)
     t.up()
 
 
@@ -463,7 +532,7 @@ def chain_with_rescan(img, b, ch):
     def finish(pts, why):
         for x, y, *_ in pts:
             t.move(x, y + 20)
-        finish_verified(t, img, [(p[0], p[1]) for p in path])
+        finish_verified(t, img, [(p[0], p[1]) for p in path], b)
         print(f'{time.time():.1f}', f'chain {len(path)} ({why})', flush=True)
         return len(path)
 
@@ -472,20 +541,7 @@ def chain_with_rescan(img, b, ch):
     region = [path[0], path[1]] + [p for p in b if (p[0], p[1]) in white] + [(x, y, c, 0.0, False) for x, y in extra]
     white = white + extra
     cv2.imwrite(str(LOG / f'white_{int(time.time()*10)}.png'), board.draw(during, region))
-    # 在发白区域里重算。游戏说这片同色泡泡互相连通（实测相邻眼睛距离可到 ~150px），
-    # 所以从 120px 开始逐步放宽，取「刚好能把整片连起来」的最小距离（最多 180px）
-    old = solver.LINK
-    for L in range(120, 185, 6):
-        solver.LINK = L; nb = solver.neighbors(region)
-        seen, st = {0, 1}, [0, 1]
-        while st:
-            q = st.pop()
-            for j in nb[q]:
-                if j not in seen:
-                    seen.add(j); st.append(j)
-        if len(seen) == len(region):
-            break
-    solver.LINK = old
+    nb, L = region_neighbors(region, (0, 1))
     best = []
     for s0 in range(len(region)):
         cand = solver.longest_from(region, s0, nb, budget=20000)
@@ -497,7 +553,7 @@ def chain_with_rescan(img, b, ch):
     if best[0] == 0 and len(best) > 1 and best[1] == 1:
         for x, y, *_ in new[2:]:
             t.move(x, y + 20)
-        finish_verified(t, img, [(p[0], p[1]) for p in new]); how = 'continue'
+        finish_verified(t, img, [(p[0], p[1]) for p in new], b); how = 'continue'
     else:
         t.move(path[0][0], path[0][1] + 20)          # 拖回起点 → 只剩 1 个，松手不算出手
         t.up(); time.sleep(0.4)
@@ -505,7 +561,7 @@ def chain_with_rescan(img, b, ch):
         t.down(new[0][0], new[0][1] + 20)
         for x, y, *_ in new[1:]:
             t.move(x, y + 20)
-        finish_verified(t, img, [(p[0], p[1]) for p in new]); how = 'restart'
+        finish_verified(t, img, [(p[0], p[1]) for p in new], b); how = 'restart'
     print(f'{time.time():.1f}', f'chain {len(path)} -> {len(new)} by white region ({how}, white {len(white)})', flush=True)
     return len(new)
 
