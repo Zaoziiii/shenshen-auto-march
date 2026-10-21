@@ -418,19 +418,18 @@ def _broken_at(img, pts):
 
 def finish_verified(t, img, pts):
     """用户：松手前确认计划的泡泡都连上了。没连全（卡了一下漏掉）就不松手，沿原路反向退回到起点
-    （经过的已选泡泡依次取消），再从起点慢慢重连；最多重连 3 遍，还不全才照现状松手。"""
+    （经过的已选泡泡依次取消），再从起点慢慢重连；只重连 1 遍，还不全就照现状松手。"""
     time.sleep(0.12)
     k = _broken_at(img, pts)
-    for tries in range(1, 4):
+    for tries in range(1, 2):
         if not k:
             break
         print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start (holding) and redo #{tries}', flush=True)
         for x, y in reversed(pts[:k]):              # 反向退回：经过的已选泡泡会依次取消
             t.slow(x, y + 20)
         time.sleep(0.2 * tries)
-        for x, y in pts[1:]:                        # 一遍比一遍慢
+        for x, y in pts[1:]:
             t.slow(x, y + 20)
-            time.sleep(0.05 * (tries - 1))
         time.sleep(0.12)
         k = _broken_at(img, pts)
     if k:
