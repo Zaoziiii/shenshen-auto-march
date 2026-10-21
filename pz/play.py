@@ -741,6 +741,24 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             print(f'{time.time():.1f}', n, 'rush, keep', keep, flush=True)
             rush_phase(keep, n, img)
             continue
+        # 死亡弹窗 / 结算页先判断：输了时背景泛红，会被误认成奥义光圈，一直点奥义卡住
+        if is_continue_dialog(img) or is_retreat_dialog(img):
+            print(f'{time.time():.1f}', n, 'dead -> give up', flush=True)
+            cv2.imwrite(str(LOG / 'dead.png'), img)
+            give_up()
+            return False
+        if is_result(img):
+            print(f'{time.time():.1f}', n, 'result', flush=True)
+            cv2.imwrite(str(LOG / 'result.png'), img)
+            # 戦闘結果 → 次へ → 獲得報酬 → 次へ；每次先确认还在结算页，避免误点地图上的「決定」
+            RESULT_IMGS.append(img)
+            for _ in range(4):
+                cur = shot()
+                if not is_result(cur):
+                    break
+                RESULT_IMGS.append(cur)
+                tap(355, 1318); time.sleep(3)
+            return True
         ready = [i for i, c in enumerate(CHARS) if pink_ratio(img, *c) > 0.09 and ougi_fail.get(i, 0) < 3]
         if ready:
             # 血量低时屏幕四周会泛红粉色，容易误判成奥义光圈 → 再看樱花：还写着「あと N」就是没攒满
@@ -775,23 +793,6 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                     ougi_fail[i] = ougi_fail.get(i, 0) + 1
                     print(f'{time.time():.1f}', n, f'ougi {i} tap failed x{ougi_fail[i]}', flush=True)
             continue
-        if is_continue_dialog(img) or is_retreat_dialog(img):
-            print(f'{time.time():.1f}', n, 'dead -> give up', flush=True)
-            cv2.imwrite(str(LOG / 'dead.png'), img)
-            give_up()
-            return False
-        if is_result(img):
-            print(f'{time.time():.1f}', n, 'result', flush=True)
-            cv2.imwrite(str(LOG / 'result.png'), img)
-            # 戦闘結果 → 次へ → 獲得報酬 → 次へ；每次先确认还在结算页，避免误点地图上的「決定」
-            RESULT_IMGS.append(img)
-            for _ in range(4):
-                cur = shot()
-                if not is_result(cur):
-                    break
-                RESULT_IMGS.append(cur)
-                tap(355, 1318); time.sleep(3)
-            return True
         b = board.detect(img)
         if len(b) < 12:
             idle += 1
