@@ -26,6 +26,8 @@ def detect(img):
     for x, y in kept:
         if y < 480 or purple_ratio(hsv, x, y) < 0.12:   # 排除「あと」倒数、炸弹脸
             continue
+        if pink_eye(hsv, x, y) < 0.05:              # 眼睛不是粉色圆环：普通泡泡挨着首领的紫色火焰图案（3-35）
+            continue
         c = body_color(hsv, x, y)
         if c:
             out.append((x, y, c, 1.0, True))
@@ -47,6 +49,12 @@ def body_color(hsv, x, y):
         'blue': ((hh >= 84) & (hh <= 117)).sum(),
     }
     return max(votes, key=votes.get)
+
+
+def pink_eye(hsv, x, y):
+    """眼睛处粉色像素占比：真火焰泡泡 ≥0.05（多数 ~0.5），普通眼睛 ≈0"""
+    r = hsv[y - 16:y + 16, x - 16:x + 16]
+    return float((((r[..., 0] >= 140) | (r[..., 0] <= 4)) & (r[..., 1] > 70) & (r[..., 2] > 170)).mean())
 
 
 def purple_ratio(hsv, x, y):

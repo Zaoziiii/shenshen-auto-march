@@ -4,7 +4,7 @@ import math
 LINK = 112
 # 当前盘面的障碍物（play 每回合设置）：{'shell': [(x, y)], 'box': [(x, y)]}
 OBST = {}
-SHELL_BONUS, BOX_PENALTY = 3, 2
+SHELL_BONUS, BOX_PENALTY = 1, 1        # 用户要长链优先：只在差不多长时起作用
 
 
 def obst_score(bubbles, ch):
@@ -124,22 +124,24 @@ def chain_clearing_cluster(bubbles, budget=20000):
     return best
 
 
-def best_chain_team(bubbles, need, bomb_len=7):
-    """用户定的普通时间顺序：
-    - 队伍奥义需要的颜色（need）：正常选最长链（火焰泡泡加分）
-    - 不需要的颜色：只有能连到 ≥7 个（生成炸弹）才考虑
-    - 两边都没有合格的链时，退回到任意颜色的最长链（总得走一步）"""
-    if not need:
-        return best_chain(bubbles)
-    need = set(need) | {'black'}           # 用户：箱子变出来的黑色泡泡也要消，不限 7 个
-    best, best_s = [], float("-inf")    # 箱子扣分可能让分数为负，也要能选
+def best_chain_team(bubbles, need, need_bonus=1):
+    """用户（2026-10-22）：最大化连接长链。所有颜色都参与，按长度比；
+    队伍奥义需要的颜色只加 1 分（差不多长时才优先它；同分取更长的），火焰泡泡每个 +8，贝壳/箱子加减分。
+    （之前「不需要的颜色要 ≥7 个才连」会放着 6 连的蓝色去连 2 连的黄色，取消）"""
+    need = set(need or ())
+    best, best_s = [], (float("-inf"), 0)
     for c in {b[2] for b in bubbles}:
         ch = longest_chain(bubbles, budget=40000, color=c)
         if len(ch) < 2:
             continue
-        if c not in need and len(ch) < bomb_len:
-            continue
-        s = len(ch) + 8 * sum(1 for i in ch if bubbles[i][4]) + obst_score(bubbles, ch)
-        if s > best_s:
-            best, best_s = ch, s
-    return best or best_chain(bubbles)
+        s = len(ch) + (need_bonus if c in need else 0) + 8 * sum(1 for i in ch if bubbles[i][4]) + obst_score(bubbles, ch)
+        if (s, len(ch)) > best_s:
+            best, best_s = ch, (s, len(ch))
+    for i, b in enumerate(bubbles):              # 含火焰的短链（每色最长链里可能没有它）
+        if b[4]:
+            ch = longest_from(bubbles, i, neighbors(bubbles))
+            if len(ch) >= 2:
+                s = len(ch) + (need_bonus if b[2] in need else 0) + 8 * sum(1 for j in ch if bubbles[j][4]) + obst_score(bubbles, ch)
+                if (s, len(ch)) > best_s:
+                    best, best_s = ch, (s, len(ch))
+    return best

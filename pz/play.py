@@ -824,11 +824,11 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                 continue
         # 用户：优先消队伍角色奥义需要的颜色（奥义已经亮了的角色不用再攒）
         need = tuple(c for i, c in enumerate(sakura_colors(img)) if c and i not in ready_now)
-        # 用户：三个角色都不需要的颜色，只有能连 ≥7 个（生成炸弹）才连；否则只连能补奥义的颜色
+        # 用户（2026-10-22）：最大化长链；奥义需要的颜色只稍微优先（solver.best_chain_team）
         solver.OBST = obstacles.detect(img)
         if any(solver.OBST.values()):
             print(f'{time.time():.1f}', n, 'obstacles', {k: v for k, v in solver.OBST.items() if v}, flush=True)
-        ch = solver.best_chain_team(b, set(need)) if need else solver.best_chain(b, prefer)
+        ch = solver.best_chain_team(b, set(need))
         n_flame = sum(1 for p in b if p[4])
         if not n_flame:
             flame_age = 0
