@@ -88,10 +88,12 @@ class Session:
             time.sleep(pause)
 
     def move(self, x, y):
-        self._to(x, y, 24, 0.008, 0.03)          # 太快游戏会漏掉泡泡（第一遍经常断）
+        # 每个泡泡上停 0.09 秒：BlueStacks 里游戏帧率低，停太短会漏掉泡泡、链从那里断
+        # （统计：BlueStacks 断链 43%，iPhone 23%）
+        self._to(x, y, 24, 0.008, 0.09)
 
     def slow(self, x, y):
-        self._to(x, y, 15, 0.015, 0.06)
+        self._to(x, y, 15, 0.015, 0.15)
 
     def up(self):
         time.sleep(0.08)
