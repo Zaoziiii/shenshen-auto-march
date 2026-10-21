@@ -88,7 +88,7 @@ class Session:
             time.sleep(pause)
 
     def move(self, x, y):
-        self._to(x, y, 30, 0.008, 0.02)
+        self._to(x, y, 24, 0.008, 0.03)          # 太快游戏会漏掉泡泡（第一遍经常断）
 
     def slow(self, x, y):
         self._to(x, y, 15, 0.015, 0.06)

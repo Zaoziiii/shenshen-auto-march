@@ -417,27 +417,25 @@ def _broken_at(img, pts):
 
 
 def finish_verified(t, img, pts):
-    """用户：松手前确认计划的泡泡都连上了。没连全（卡了一下漏掉）就沿原路反向退回到起点再松手
-    （只剩 1 个，不算出手），然后从头慢一点重新连一遍；第二次还不全就照现状松手。"""
+    """用户：松手前确认计划的泡泡都连上了。没连全（卡了一下漏掉）就不松手，沿原路反向退回到起点
+    （经过的已选泡泡依次取消），再从起点慢慢重连；最多重连 3 遍，还不全才照现状松手。"""
     time.sleep(0.12)
     k = _broken_at(img, pts)
-    if not k:
-        t.up(); return
-    print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start and redo', flush=True)
-    for x, y in reversed(pts[:k - 1]):          # 反向退回：经过的已选泡泡会依次取消
-        t.move(x, y + 20)
-    time.sleep(0.15)
-    t.up()                                      # 只剩起点 1 个 → 松手不算出手
-    time.sleep(0.5)
-    t2 = touch.Touch()
-    t2.down(pts[0][0], pts[0][1] + 20)
-    for x, y in pts[1:]:
-        t2.slow(x, y + 20)
-    time.sleep(0.12)
-    k2 = _broken_at(img, pts)
-    if k2:
-        print(f'{time.time():.1f}', f'redo still {k2}/{len(pts)}, releasing as is', flush=True)
-    t2.up()
+    for tries in range(1, 4):
+        if not k:
+            break
+        print(f'{time.time():.1f}', f'chain only {k}/{len(pts)}, back to start (holding) and redo #{tries}', flush=True)
+        for x, y in reversed(pts[:k]):              # 反向退回：经过的已选泡泡会依次取消
+            t.slow(x, y + 20)
+        time.sleep(0.2 * tries)
+        for x, y in pts[1:]:                        # 一遍比一遍慢
+            t.slow(x, y + 20)
+            time.sleep(0.05 * (tries - 1))
+        time.sleep(0.12)
+        k = _broken_at(img, pts)
+    if k:
+        print(f'{time.time():.1f}', f'redo still {k}/{len(pts)}, releasing as is', flush=True)
+    t.up()
 
 
 def chain_with_rescan(img, b, ch):
