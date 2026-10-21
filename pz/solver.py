@@ -4,7 +4,7 @@ import math
 LINK = 112
 # 当前盘面的障碍物（play 每回合设置）：{'shell': [(x, y)], 'box': [(x, y)]}
 OBST = {}
-SHELL_BONUS, BOX_PENALTY = 3, 4
+SHELL_BONUS, BOX_PENALTY = 3, 2
 
 
 def obst_score(bubbles, ch):
@@ -77,7 +77,7 @@ def best_chain(bubbles, prefer=(), prefer_mult=1.3, flame_bonus=8):
     for i, b in enumerate(bubbles):
         if b[4]:
             cands.append(longest_from(bubbles, i, nb))
-    best, best_s = [], -1
+    best, best_s = [], float("-inf")    # 箱子扣分可能让分数为负，也要能选
     for ch in cands:
         if len(ch) < 2:
             continue
@@ -132,7 +132,7 @@ def best_chain_team(bubbles, need, bomb_len=7):
     if not need:
         return best_chain(bubbles)
     need = set(need) | {'black'}           # 用户：箱子变出来的黑色泡泡也要消，不限 7 个
-    best, best_s = [], -1
+    best, best_s = [], float("-inf")    # 箱子扣分可能让分数为负，也要能选
     for c in {b[2] for b in bubbles}:
         ch = longest_chain(bubbles, budget=40000, color=c)
         if len(ch) < 2:
