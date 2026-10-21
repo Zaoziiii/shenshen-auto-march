@@ -135,7 +135,7 @@ def main(cfg):
                 log(f'已刷够 {count} 次，还有 {nav.hearts(img)} 颗心，继续刷完心再结束')
             k += 1
             log(f'=== 第 {k} 局 {stage}  队伍：{"、".join(c.get("name", "?") for c in team)}  乱舞留 {keep}  （剩 {nav.hearts(img)} 颗心）')
-            save_status(running=True, round=k, win=win, lose=lose, unknown=unknown, drops=drops, team=[c.get('name') for c in team])
+            save_status(running=True, stage=stage, round=k, win=win, lose=lose, unknown=unknown, drops=drops, team=[c.get('name') for c in team])
             play.RESULT_IMGS.clear()
             t_round[0] = time.time()
             play.tap(355, 1340); time.sleep(4)
@@ -144,6 +144,7 @@ def main(cfg):
             time.sleep(3)
             r = play.run(prefer=(keep,))
             tally(r, f'第 {k} 局')
+            save_status(running=True, stage=stage, round=k, win=win, lose=lose, unknown=unknown, drops=drops, team=[c.get('name') for c in team])
             time.sleep(2)
     except play.Stopped as e:
         log('已停止：', e)

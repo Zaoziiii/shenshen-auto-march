@@ -9,8 +9,23 @@ final class Runner: ObservableObject {
     @Published var log = ""
     @Published var running = false
     @Published var summary = ""
+    @Published var progress = ""     // 「已打 N 局」：每 2 秒读一次 status.json（farm.py 每局开始和结束都会写）
     var proc: Process?
     var monitors: [Any] = []
+
+    func readProgress() {
+        guard let d = try? Data(contentsOf: URL(fileURLWithPath: ROOT + "/status.json")),
+              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
+        let w = j["win"] as? Int ?? 0, l = j["lose"] as? Int ?? 0, u = j["unknown"] as? Int ?? 0
+        let done = w + l + u, round = j["round"] as? Int ?? 0
+        let stage = (j["stage"] as? String).map { $0 + "  " } ?? ""
+        var s = "\(stage)已打 \(done) 局（胜 \(w)  负 \(l)" + (u > 0 ? "  不明 \(u)" : "") + "）"
+        if (j["running"] as? Bool ?? false) && running && round > done { s += "  ·  正在打第 \(round) 局" }
+        if let dr = j["drops"] as? [String: Int], !dr.isEmpty {
+            s += "\n掉落：" + dr.sorted { $0.value > $1.value }.map { "\($0.key) \($0.value)" }.joined(separator: "、")
+        }
+        if s != progress { progress = s }
+    }
 
     init() {
         // 紧急停止：⌃C（control+C）。全局监听（在别的程序里按也生效，需要辅助功能权限）+ 本窗口监听
@@ -25,6 +40,7 @@ final class Runner: ObservableObject {
             return e
         }) { monitors.append(l) }
         // 再加一层轮询：直接读键盘状态（不依赖辅助功能权限）
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in self.readProgress() }
         Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             guard self.running else { return }
             let c = CGEventSource.keyState(.combinedSessionState, key: 8)          // kVK_ANSI_C
@@ -125,6 +141,9 @@ struct ContentView: View {
                 Button("停止（⌃C）") { r.stop() }.disabled(!r.running)
                 Spacer()
                 Text("运行中在任何程序里按 ⌃C（control+C）都会停止").font(.caption).foregroundStyle(.secondary)
+            }
+            if !r.progress.isEmpty {
+                GroupBox("进度") { Text(r.progress).font(.title3).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
             }
             if !r.summary.isEmpty {
                 GroupBox("汇总") { Text(r.summary).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
