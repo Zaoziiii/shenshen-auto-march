@@ -416,6 +416,10 @@ def _broken_at(img, pts):
         verdict = by_color                # 计数读不出 / 两位数可能只读到个位 → 看颜色
     else:
         verdict = None
+    if verdict:                                   # 断链现场存图，方便看断在哪一步
+        vis = during.copy()
+        cv2.polylines(vis, [np.array([(x, y + 20) for x, y in pts])], False, (255, 0, 255), 4)
+        cv2.imwrite(str(LOG / f'broken_{int(time.time() * 10)}_{verdict}of{n}.png'), vis)
     print(f'{time.time():.1f}', f'verify: plan {n}, game count {c if c is not None else "?"}, color {by_color or "ok"}'
           f' -> {"OK" if verdict is None else f"broken at {verdict}"}', flush=True)
     return verdict if verdict and 0 < verdict < n else None
@@ -425,7 +429,7 @@ def region_neighbors(region, seed):
     """游戏说发白区域里的同色泡泡互相连通（实测相邻眼睛距离可到 ~150px），
     所以从 120px 开始逐步放宽，取「刚好能把整片连起来」的最小距离（最多 180px）"""
     old = solver.LINK
-    for L in range(120, 185, 6):
+    for L in range(120, 157, 6):               # 再远游戏就拖不过去了（断链多半是这种远距离连接）
         solver.LINK = L; nb = solver.neighbors(region)
         seen, st = set(seed), list(seed)
         while st:
@@ -552,6 +556,7 @@ def chain_with_rescan(img, b, ch):
     t.move(path[1][0], path[1][1] + 20)
     time.sleep(0.3)
     during = shot()
+    t.slow(path[1][0], path[1][1] + 20)             # 截图停了一会儿：原地再报一次位置，游戏重新跟上手指
     white = [(p[0], p[1]) for p in whiten.whitened_same_color(img, during, b, c, skip=path[:2])]
     if bombs.detect(img, b):                       # 有炸弹时存原图，方便以后校准炸弹旁的发白识别
         k = int(time.time() * 10)
