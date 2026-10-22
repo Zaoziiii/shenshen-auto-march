@@ -484,7 +484,7 @@ def replan_by_white(t, img, b, pts, k):
       - 原计划：从断点慢慢接着连（可能只是拖太快漏掉了）
       - 接着已选前缀走、避开断掉那一步的最长路径（可以往回退几个换条路）
       - 换起点的最长路径（原起点在链中间时；退回起点只剩 1 个松手，不算出手）
-    区域 = 原计划的泡泡 + 现在发白的同色泡泡。先比长度；一样长时：不走断掉那一步 > 不松手 > 少退。
+    区域 = 原计划的泡泡 + 现在发白的同色泡泡。按「成功率 × 长度」挑（见下面 P）。
     返回 (触摸, 新路径)。"""
     x, y = pts[k - 1]
     t.slow(x, y + 20)
@@ -509,7 +509,11 @@ def replan_by_white(t, img, b, pts, k):
     for s0 in range(len(region)):
         p2 = solver.longest_from(region, s0, nb)
         cands.append((len(p2), True, False, 0, 'restart', p2))
-    ln, _, _, j, how, best = max(cands, key=lambda c: c[:4])
+    # 用户：断了要重找起点。按实测成功率挑（farm.log 统计：原路重试 12/126、保留前段换路 21/94、换起点 38/81），
+    # 期望连上的个数 = 成功率×新长度 +（失败时）保留下来的个数（实测三种失败时都约等于 k）；一样时取更长的
+    P = {'retry': 0.10, 'hold': 0.22, 'restart': 0.47}
+    ev = lambda c: P[c[4]] * c[0] + (1 - P[c[4]]) * k
+    ln, _, _, j, how, best = max(cands, key=lambda c: (round(ev(c), 2), c[0]))
     print(f'{time.time():.1f}', f'replan by white: connected {k}/{n}, white {len(white)}, '
           f'pick {how} {ln} (link {L})', flush=True)
     if how == 'restart':
