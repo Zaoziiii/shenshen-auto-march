@@ -315,7 +315,9 @@ def zigzag_sweep(x0, y0):
         go_right = not go_right
     import os
     if os.environ.get('PAZ_DEVICE') == 'bluestacks':
-        subprocess.run(['/usr/bin/python3', str(ROOT / 'adbin.py'), 'fast', *[str(v) for p in pts for v in p]], check=True)
+        sys.path.insert(0, str(ROOT))
+        import adbin, rawtouch                       # 直接在本进程里写触摸事件，不再另开 python
+        rawtouch.path([adbin.px(*p) for p in pts], step=55, dt=0.005, hold=0.04, first=0.15)
         mark(); return
     args = ['%.1f %.1f' % touch.to_screen(x, yy) for x, yy in pts]
     subprocess.run([str(ROOT / 'sweep'), '20', '5000', *' '.join(args).split()], check=True)
@@ -388,8 +390,7 @@ def rush_phase(keep, n, img=None):
             start, c = (p0[0], p0[1]), p0[2]
         x, y = start
         t_first = t_first or time.time()
-        zigzag_sweep(x, y + 20)
-        time.sleep(0.2)                              # 让消掉的位置先落一下，下一张截图的位置更准
+        zigzag_sweep(x, y + 20)                      # 扫完直接截下一张（截图本身要 ~0.4 秒，泡泡已经落得差不多）
         print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})', flush=True)
     print(f'{time.time():.1f}', n, f'rush done: {k} sweeps in {time.time() - t0:.1f}s', flush=True)
     cv2.imwrite(str(LOG / f'rush_{n:03d}_end.png'), shot())
