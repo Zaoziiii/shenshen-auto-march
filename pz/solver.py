@@ -124,9 +124,9 @@ def chain_clearing_cluster(bubbles, budget=20000):
     return best
 
 
-def best_chain_team(bubbles, need, need_bonus=1):
+def best_chain_team(bubbles, need, need_bonus=3):
     """用户（2026-10-22）：最大化连接长链。所有颜色都参与，按长度比；
-    队伍奥义需要的颜色只加 1 分（差不多长时才优先它；同分取更长的），火焰泡泡每个 +8，贝壳/箱子加减分。
+    队伍奥义需要的颜色加 3 分（用户 2026-10-22：比最长链短 3 个以内就优先奥义色；同分取更长的），火焰泡泡每个 +8，贝壳/箱子加减分。
     （之前「不需要的颜色要 ≥7 个才连」会放着 6 连的蓝色去连 2 连的黄色，取消）"""
     need = set(need or ())
     best, best_s = [], (float("-inf"), 0)
