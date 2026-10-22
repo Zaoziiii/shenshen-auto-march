@@ -75,6 +75,16 @@ def _bs_raw():
     return cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
 
 
+def _bs_reconnect():
+    """adb 偶尔会掉线（BlueStacks 那边断开）：重新 connect 一下"""
+    sys.path.insert(0, str(ROOT))
+    import adbin
+    try:
+        subprocess.run([adbin.ADB, 'connect', adbin.SERIAL], capture_output=True, timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def shot():
     import os
     if os.environ.get('PAZ_DEVICE') == 'bluestacks':
@@ -89,6 +99,7 @@ def shot():
                 M = np.array(adbin.to_std_matrix(img.shape[1]), dtype=np.float32)
                 return cv2.warpAffine(img, M, STD, flags=cv2.INTER_AREA, borderMode=cv2.BORDER_REPLICATE)
             time.sleep(1)
+            _bs_reconnect()
         raise RuntimeError('截不到 BlueStacks 画面（adb 断开了？）')
     img = None
     for _ in range(5):                       # 截图偶尔失败（窗口刚变化等）→ 重试
