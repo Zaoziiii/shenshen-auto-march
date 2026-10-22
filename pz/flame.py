@@ -24,7 +24,7 @@ def detect(img):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     out = []
     for x, y in kept:
-        if y < 480 or purple_ratio(hsv, x, y) < 0.12:   # 排除「あと」倒数、炸弹脸
+        if y < 480 or purple_ratio(hsv, x, y) < 0.09:   # 排除「あと」倒数、炸弹脸（真火焰另有粉色眼睛核对，放宽一点）
             continue
         if pink_eye(hsv, x, y) < 0.05:              # 眼睛不是粉色圆环：普通泡泡挨着首领的紫色火焰图案（3-35）
             continue
@@ -41,6 +41,11 @@ def body_color(hsv, x, y):
     r = r[(r[:, 1] > 90) & (r[:, 2] > 120) & ~((r[:, 0] >= 118) & (r[:, 0] <= 158))]
     if len(r) < 60:
         return 'black' if dark >= 400 else None
+    # 眼睛正下方是嘴（深红），黄色火焰泡泡还泛粉，会被投成红色 → 改看身体两侧（嘴外面）
+    sides = np.concatenate([hsv[y + 5:y + 40, x - 42:x - 26].reshape(-1, 3), hsv[y + 5:y + 40, x + 26:x + 42].reshape(-1, 3)])
+    sides = sides[(sides[:, 1] > 60) & (sides[:, 2] > 150) & ~((sides[:, 0] >= 118) & (sides[:, 0] <= 158))]
+    if len(sides) >= 150:
+        r = sides
     hh = r[:, 0]
     votes = {
         'red': ((hh <= 12) | (hh >= 159)).sum(),
