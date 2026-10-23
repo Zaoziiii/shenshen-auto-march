@@ -502,11 +502,11 @@ def cancel_to_start(t, img, pts, k):
                 time.sleep(0.1)
         time.sleep(0.3)
         d = shot()
-        # 只剩 1 个时：左上没有计数标签，pts[1:k] 中间也没有选中的白色菱形 ✦
-        # （发白不算：能连的同色泡泡在只选 1 个时也可能还是淡色）
+        # 只剩 1 个时没有计数标签（「1」太细认不出，选 ≥2 个时 78/80 能认出）。
+        # 菱形只作辅助：发白的泡泡偶尔会被误认成 1 个菱形，所以 ≥2 个才算还选着
         label = count.find_label(d)
         dia = [p for p, f in zip(pts[1:k], diamonds(img, d, pts[1:k])) if f]
-        if label is None and not dia:
+        if label is None and len(dia) < 2:
             t.up(); time.sleep(0.4)
             return True
         cv2.imwrite(str(LOG / f'cancel_{int(time.time() * 10)}.png'), d)
