@@ -216,6 +216,19 @@ def is_aim_screen(img):
     return (((r[..., 0] >= 125) & (r[..., 0] <= 160)) & (r[..., 1] > 80) & (r[..., 2] > 150)).mean() > 0.3
 
 
+LOW_HP = 500
+
+
+def read_hp(img):
+    """读我方血量（底部血条上的「358/4588」），返回 (当前, 上限)；读不出返回 None。约 0.2 秒"""
+    import nav
+    for _, _, s in nav.ocr(img[1315:1370, 380:600]):
+        m = s.replace(' ', '').split('/')
+        if len(m) == 2 and m[0].isdigit() and m[1].isdigit() and int(m[0]) <= int(m[1]):
+            return int(m[0]), int(m[1])
+    return None
+
+
 def is_rush(img):
     """乱舞时间：底部背景变成彩虹色"""
     r = cv2.cvtColor(img[1400:1500, 40:670], cv2.COLOR_BGR2HSV)
@@ -886,6 +899,17 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             # 敌人奥义特写、动画中途等：棋盘不完整，先别出手（炸弹多时泡泡少是正常的）
             time.sleep(0.5)
             continue
+        hp = read_hp(img)
+        if hp and hp[0] < LOW_HP:
+            # 用户：血量低于 500 时，场上有炸弹就点掉（先点等级最高的；点炸弹不算出手）
+            cand = [k for k in bb_all if k[2] < 4 and all(math.dist(k[:2], d) > 60 for d in dud)]
+            pick = max(cand, key=lambda k: k[2]) if cand else None
+            if pick:
+                print(f'{time.time():.1f}', n, f'bomb lv{pick[2]} (low hp {hp[0]}/{hp[1]})', flush=True)
+                tap(pick[0], pick[1]); time.sleep(2.2)
+                if same_layout(b, board.detect(shot())):
+                    dud.append(pick[:2])
+                continue
         if len(b) < 30 and not any(p[4] for p in b):
             # 用户：泡泡少于 30 个（炸弹占了地方）才点炸弹腾出格子，先点等级最高的；平时炸弹留着合成
             cand = [k for k in bb_all if k[2] < 4 and all(math.dist(k[:2], d) > 60 for d in dud)]
