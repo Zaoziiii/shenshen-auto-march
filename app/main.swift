@@ -92,7 +92,9 @@ final class Runner: ObservableObject {
     func stop() {
         log += "\n>>> 收到停止，等当前这一步做完…\n"
         FileManager.default.createFile(atPath: ROOT + "/STOP", contents: Data())
-        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { if self.running { self.proc?.terminate() } }
+        // 20 秒后还没停才强行结束 —— 只结束「这一次」的脚本（之前用 self.proc：停止后马上重新开始，会把新开的那个杀掉）
+        let p = proc
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { if let p = p, p.isRunning { p.terminate() } }
     }
 }
 
