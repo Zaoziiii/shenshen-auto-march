@@ -38,11 +38,19 @@ class RawTouch:
     def up(self):
         self._send(_ev(EV_ABS, ABS_MT_TRACKING_ID, -1), _ev(EV_KEY, BTN_TOUCH, 0))
 
-    def close(self):
+    def close(self, timeout=3):
         try:
-            self.p.stdin.close(); self.p.wait(timeout=3)
+            self.p.stdin.close(); self.p.wait(timeout=timeout)
         except Exception:
             self.p.kill()
+
+
+def release():
+    """单独开一条连接只发「松开」并关掉（关闭时 adb 才保证把数据送到）：
+    乱舞时实测上一笔的松开会丢，游戏里手指一直按着；补发这一下就能松开"""
+    t = RawTouch()
+    t.up(); time.sleep(0.03)
+    t.close(timeout=10)
 
 
 def path(pts, step=30, dt=0.008, hold=0.05, first=0.03, conn=None):
@@ -61,4 +69,4 @@ def path(pts, step=30, dt=0.008, hold=0.05, first=0.03, conn=None):
     time.sleep(hold)
     t.up(); time.sleep(0.02)
     if conn is None:
-        t.close()
+        t.close(timeout=10)                   # 等 adb 把松开送到再结束；不能 3 秒就强杀（会丢掉松开）

@@ -380,25 +380,26 @@ def rush_phase(keep, n, img=None):
     t0 = time.time(); k = 0
     nxt = rush_pick(b, keep, img)
     t_first = None                               # 第一次真正划下去的时间（乱舞倒计时从这里开始）
-    conn = None
-    if os.environ.get('PAZ_DEVICE') == 'bluestacks':
-        # 整个乱舞共用一条触摸连接：每笔各开一条时，边扫边截图会让上一笔的「松开」晚到或丢掉，
-        # 游戏以为手指一直按着，后面几笔全接在第一笔的链上（实测蓝色 14 连一直不松手）
+    bs = os.environ.get('PAZ_DEVICE') == 'bluestacks'
+    if bs:
         sys.path.insert(0, str(ROOT))
         import rawtouch
-        conn = rawtouch.RawTouch()
     while nxt and ((t_first is None and time.time() - t0 < 20) or (t_first is not None and time.time() - t_first < 10)):
         c, x, y, counts = nxt
         k += 1
         t_first = t_first or time.time()
         print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})  counts {counts}', flush=True)
-        th = threading.Thread(target=zigzag_sweep, args=(x, y + 10, conn))
+        th = threading.Thread(target=zigzag_sweep, args=(x, y + 10), daemon=True)
         th.start()
         time.sleep(0.15)                         # 等这一笔真正按下去、颜色开始被选中
         frame = shot()
         on = is_rush(frame)
         fb = board.detect(frame)
-        th.join()
+        th.join(timeout=8)
+        if bs:
+            # 每笔扫完再单独补一次松开（实测：边扫边截图时这一笔的松开会丢，游戏以为手指一直按着、
+            # 后面几笔全接在第一笔的链上；整轮共用一条连接更糟，松开根本送不到，一直不松手）
+            rawtouch.release()
         if not on:
             break
         # 扫的时候被选中的泡泡在发光，可能认不出 → 扫之前那张图里这个颜色的位置也算「要被扫掉」
@@ -410,9 +411,8 @@ def rush_phase(keep, n, img=None):
                 break
             b = board.detect(frame)
             nxt = rush_pick(b, keep, frame)
-    if conn:
-        conn.up(); time.sleep(0.05)              # 保险：再松一次手
-        conn.close()
+    if bs:
+        rawtouch.release()                       # 保险：再松一次手
     print(f'{time.time():.1f}', n, f'rush done: {k} sweeps in {time.time() - t0:.1f}s', flush=True)
     cv2.imwrite(str(LOG / f'rush_{n:03d}_end.png'), shot())
 
