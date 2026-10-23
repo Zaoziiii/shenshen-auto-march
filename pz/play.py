@@ -389,7 +389,8 @@ def rush_phase(keep, n, img=None):
             start, c = (p0[0], p0[1]), p0[2]
         x, y = start
         t_first = t_first or time.time()
-        zigzag_sweep(x, y + 20)                      # 扫完直接截下一张（截图本身要 ~0.4 秒，泡泡已经落得差不多）
+        zigzag_sweep(x, y + 10)                      # 按在身体中间偏上（+20 太靠下，容易按到下面那个泡泡）
+        time.sleep(0.25)                             # 等消掉的位置落定再截图：截到还在掉的画面，起点会按到掉下来的别的颜色（保留色）
         print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})  counts {counts}', flush=True)
     print(f'{time.time():.1f}', n, f'rush done: {k} sweeps in {time.time() - t0:.1f}s', flush=True)
     cv2.imwrite(str(LOG / f'rush_{n:03d}_end.png'), shot())
