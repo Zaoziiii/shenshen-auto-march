@@ -928,9 +928,12 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             print(f'{time.time():.1f}', n, 'obstacles', {k: v for k, v in solver.OBST.items() if v}, flush=True)
         ch = solver.best_chain_team(b, set(need))
         n_flame = sum(1 for p in b if p[4])
-        longest = max((len(solver.longest_chain(b, budget=20000, color=c)) for c in {p[2] for p in b}), default=0)
-        if longest <= 3 and not n_flame:
-            # 用户：只剩能连 3 个及以下的链时，先点炸弹（从大到小，点炸弹不算出手），点完重新看盘面
+        L = {c: len(solver.longest_chain(b, budget=20000, color=c)) for c in {p[2] for p in b}}
+        short = all(v <= (3 if c in need else 6) for c, v in L.items())
+        if short and not n_flame:
+            # 用户：奥义要的颜色最长 ≤3、其他颜色最长 ≤6（都没有像样的链）时，先点炸弹
+            # （从大到小，点炸弹不算出手），点完重新看盘面
+            longest = L
             cand = [k for k in bb_all if k[2] < 4 and all(math.dist(k[:2], d) > 60 for d in dud)]
             pick = max(cand, key=lambda k: k[2]) if cand else None
             if pick:
