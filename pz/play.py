@@ -478,6 +478,27 @@ def extend_from(region, prefix, nb, budget=20000):
     return best
 
 
+def cancel_to_start(t, img, pts, k):
+    """拖回起点取消（只剩起点 1 个时松手不算出手）。用户：BlueStacks 上往回拖经常没取消掉，
+    直接松手就把已选的几个真的消掉了（长链变成两条短链）。所以松手前先截图确认只剩 1 个：
+    计数没了（或 ≤1）且 pts[1:k] 都不再是选中状态。确认了才松手返回 True；两次都没确认就不松手，返回 False。"""
+    for attempt in range(2):
+        for x, y in reversed(pts[:k - 1]):
+            t.slow(x, y + 20)
+            if attempt:
+                time.sleep(0.1)
+        time.sleep(0.3)
+        d = shot()
+        c = count.read_count(d)
+        if (c is None or c <= 1) and not any(selected_flags(img, d, pts[:k])[1:]):
+            t.up(); time.sleep(0.4)
+            return True
+        print(f'{time.time():.1f}', f'cancel to start not confirmed (count {c}), attempt {attempt + 1}', flush=True)
+        for x, y in pts[1:k]:                     # 第二次前先沿原路走回去，再重新往回拖
+            t.slow(x, y + 20)
+    return False
+
+
 def replan_by_white(t, img, b, pts, k):
     """连线断在第 k 个（已选 pts[:k]），手指不松开，重新规划。原则（用户）：最大化连接长度，
     新路径绝不比原计划短。候选：
@@ -516,11 +537,11 @@ def replan_by_white(t, img, b, pts, k):
     ln, _, _, j, how, best = max(cands, key=lambda c: (round(ev(c), 2), c[0]))
     print(f'{time.time():.1f}', f'replan by white: connected {k}/{n}, white {len(white)}, '
           f'pick {how} {ln} (link {L})', flush=True)
+    if how == 'restart' and not cancel_to_start(t, img, pts, k):
+        # 取消不掉就不能换起点（松手会把已选的消掉）：改用不松手的方案里最好的
+        ln, _, _, j, how, best = max((c for c in cands if c[4] != 'restart'), key=lambda c: (round(ev(c), 2), c[0]))
+        print(f'{time.time():.1f}', f'  -> keep holding, pick {how} {ln}', flush=True)   # 手指已经回到 pts[k-1]
     if how == 'restart':
-        for x, y in reversed(pts[:k - 1]):      # 退回起点：只剩 1 个，松手不算出手
-            t.slow(x, y + 20)
-        time.sleep(0.15)
-        t.up(); time.sleep(0.4)
         t = touch.Touch()
         t.down(region[best[0]][0], region[best[0]][1] + 20)
         rest = best[1:]
@@ -640,8 +661,12 @@ def chain_with_rescan(img, b, ch):
             t.move(x, y + 20)
         finish_verified(t, img, [(p[0], p[1]) for p in new], b); how = 'continue'
     else:
-        t.move(path[0][0], path[0][1] + 20)          # 拖回起点 → 只剩 1 个，松手不算出手
-        t.up(); time.sleep(0.4)
+        if not cancel_to_start(t, img, [(p[0], p[1]) for p in path], 2):   # 拖回起点 → 只剩 1 个才松手
+            for x, y, *_ in path[2:]:                # 取消不掉：不换起点，按原计划连完
+                t.move(x, y + 20)
+            finish_verified(t, img, [(p[0], p[1]) for p in path], b)
+            print(f'{time.time():.1f}', f'chain {len(path)} (cancel failed, keep plan)', flush=True)
+            return len(path)
         t = touch.Touch()
         t.down(new[0][0], new[0][1] + 20)
         for x, y, *_ in new[1:]:
