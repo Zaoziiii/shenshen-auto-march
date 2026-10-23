@@ -128,10 +128,7 @@ def main(cfg):
                 if heart_out == 'wait':
                     wait_for_heart(stage, team_sel); continue
                 if heart_out == 'buy':
-                    got = nav.buy_hearts()
-                    if got == 'event':
-                        log('活动体力用完了，停止'); break
-                    if got:
+                    if nav.buy_hearts():
                         continue
                     log('补充体力失败，停止'); nav_failed = True; break
             if done and k == count:

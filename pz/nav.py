@@ -303,25 +303,45 @@ def open_game():
 
 
 # ---------- 用宝玉（花珠子）补充体力 ----------
+def heart_rows(t):
+    """「ハート回復」弹窗里的每一行：[(名字, 所持数, つかう按钮坐标, 宝玉费用)]。
+    一行 = 左边名字 + 右上「所持：N」+ 右下「つかう」（refs/heart_popup.png：宝玉在 y≈730，つかう 在 y≈784）"""
+    rows = []
+    for x, y, s in t:
+        if '所持' not in s:
+            continue
+        digits = ''.join(ch for ch in s.split('所持')[-1] if ch.isdigit())
+        n = int(digits) if digits else 0
+        btn = next(((bx, by) for bx, by, bs in t if 'つかう' in bs and 20 <= by - y <= 100 and abs(bx - x) < 120), None)
+        name = next((ns for nx, ny, ns in t if nx < 330 and abs(ny - y) < 25 and '所持' not in ns), '')
+        cost = next((int(cs) for cx, cy, cs in t if cs.strip().isdigit() and cx < 200 and 40 <= cy - y <= 110), None)
+        rows.append((name, n, btn, cost))
+    return rows
+
+
 def buy_hearts(max_cost=50):
-    """爱心右边的「+」→「ハート回復」弹窗：宝玉 50 个回复 10 颗心 →「つかう」。
-    如果之后还有确认弹窗，只点肯定的按钮（つかう/はい/OK/回復），绝不点购买宝玉之类的按钮。
+    """爱心右边的「+」→「ハート回復」弹窗。用户：先用补心道具（所持 >0 的非宝玉行），道具用完了才用宝玉 50 个回复 10 颗心。
+    之后如果还有确认弹窗，只点肯定的按钮（つかう/はい/OK/回復），绝不点购买宝玉之类的按钮。
     成功返回 True（心数变多），否则 False。"""
     before = hearts(play.shot())
     play.tap(247, 252); time.sleep(2)
     t = ocr(play.shot())
     if not find(t, 'ハート回復'):
         log('没打开「ハート回復」弹窗'); return False
-    cost = next((int(s) for x, y, s in t if s.strip().isdigit() and 700 <= y <= 820 and x < 200), None)
-    if cost is not None and cost > max_cost:
-        log(f'补充体力要 {cost} 宝玉，超过上限 {max_cost}，不买'); play.tap(350, 1325); return False
-    owned = next((s for x, y, s in t if '所持' in s), '')
-    if not any('宝玉' in s for _, _, s in t):
-        # 活动关的体力弹窗不是「宝玉 50 个」（是活动道具，所持：1 之类）。用户：活动体力用完就停，不补
-        log(f'这是活动体力的补充弹窗（{owned}），不补充'); play.tap(350, 1325); time.sleep(1.5)
-        return 'event'
-    log(f'用宝玉补充体力（{owned}）')
-    play.tap(*(find(t, 'つかう') or (565, 778))); time.sleep(2)
+    rows = heart_rows(t)
+    items = [r for r in rows if '宝玉' not in r[0] and r[1] > 0 and r[2]]
+    jade = next((r for r in rows if '宝玉' in r[0] and r[2]), None)
+    if items:
+        name, n, btn, _ = items[0]
+        log(f'用道具补充体力：{name}（所持 {n}）')
+    elif jade:
+        name, n, btn, cost = jade
+        if cost is not None and cost > max_cost:
+            log(f'补充体力要 {cost} 宝玉，超过上限 {max_cost}，不买'); play.tap(350, 1325); return False
+        log(f'用宝玉补充体力（所持 {n}）')
+    else:
+        log(f'补心弹窗里没有能用的道具或宝玉：{rows}'); play.tap(350, 1325); return False
+    play.tap(*btn); time.sleep(2)
     for _ in range(3):                                        # 可能的确认弹窗
         t = ocr(play.shot())
         if any(k in s for _, _, s in t for k in ('購入', 'ショップ', '足りません', '不足')):
@@ -335,5 +355,7 @@ def buy_hearts(max_cost=50):
         if find(t, 'とじる'):
             play.tap(*find(t, 'とじる')); time.sleep(1.5)
     after = hearts(play.shot())
+    if after <= before:                                       # 心数动画慢：再等一下读一次
+        time.sleep(2); after = hearts(play.shot())
     log(f'补充体力：{before} → {after} 颗心')
     return after > before
