@@ -41,7 +41,6 @@ def bomb_level(n):
 
 def orient_for_merge(b, ch, bb):
     """炸弹生成在链尾：如果反过来连能让新炸弹落在同级炸弹旁边（自动合成），就反过来"""
-    import math
     lv = bomb_level(len(ch))
     if not lv or not bb or len(ch) < 2:
         return ch
@@ -233,7 +232,6 @@ def is_rush(img):
 
 
 def sweep_order(pts):
-    import math
     cur = min(pts, key=lambda p: p[0] + p[1]); order = [cur]; rest = set(pts) - {cur}
     while rest:
         cur = min(rest, key=lambda p: math.dist(p, cur)); order.append(cur); rest.discard(cur)
@@ -270,7 +268,6 @@ RUSH_WINDOW = 4.8     # 用户定：从第一次连接开始计时，超过这�
 
 
 def _seg_dist(p, a, b):
-    import math
     ax, ay = a; bx, by = b; px, py = p
     dx, dy = bx - ax, by - ay
     L = dx * dx + dy * dy
@@ -281,7 +278,6 @@ def _seg_dist(p, a, b):
 def safe_strokes(pts, avoid, clear=48):
     """乱舞用：把同色点分成若干笔，每一段线都不经过保留色泡泡（离它们 ≥clear px）。
     起点选离保留色最远的点；接不下去就断开另起一笔。"""
-    import math
     rest = list(pts); strokes = []
     def far(p): return min((math.dist(p, a) for a in avoid), default=999)
     while rest:
@@ -654,7 +650,6 @@ def chain_with_rescan(img, b, ch):
     连上前 2 个后游戏会把整片可连通的同色泡泡变白 → 以「已选 2 个 + 发白的」为准重新算最长链：
       - 新链从原起点出发：不松手，接着拖新链
       - 新链从别的泡泡出发：原路拖回起点取消（普通时间只剩 1 个松手不算出手），再按新链重连"""
-    import math
     path = [b[i] for i in ch]
     if len(path) < 2:
         return 0
@@ -769,7 +764,6 @@ BOMB_REACH = {1: 1 * RING, 2: 2 * RING, 3: 3 * RING, 4: 0}   # 用户：1 级炸
 
 def bomb_for_flames(b, bb):
     """找能炸到最多火焰泡泡的炸弹，返回 (炸弹, 能炸到的火焰数)"""
-    import math
     nb = solver.neighbors(b)
     best, best_s = None, 0
     for x, y, lv, r in bb:
@@ -916,7 +910,6 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             # 火焰泡泡出现后只有 2 次行动（连线算行动，炸弹/奥义不算）。用户定：
             #   第 1 回合：先找链（能整块清掉某片火焰 / 清掉一半以上），不行再用炸弹
             #   第 2 回合：必须先用炸弹（奥义亮了的上面已经先放了），能炸到火焰的炸弹全部用掉，再连线
-            import math
             whole = solver.chain_clearing_cluster(b)
             if whole:
                 ch = whole
