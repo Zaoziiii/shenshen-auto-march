@@ -301,7 +301,7 @@ RUSH_TOP = 470                             # 扫到这里为止
 RUSH_ROW = 85                              # 每一趟往上移多少（略小于泡泡直径 ~90，避免漏）
 
 
-def zigzag_sweep(x0, y0):
+def zigzag_sweep(x0, y0, conn=None):
     """用户定的乱舞扫法：按住起点（该颜色最下面的泡泡）→ 横着来回滑，一路往上扫到顶 → 松开。
     乱舞时只收集和第一个泡泡同色的，划过别的颜色没关系，所以不用识别位置。"""
     pts = [(x0, y0)]
@@ -317,7 +317,7 @@ def zigzag_sweep(x0, y0):
     if os.environ.get('PAZ_DEVICE') == 'bluestacks':
         sys.path.insert(0, str(ROOT))
         import adbin, rawtouch                       # 直接在本进程里写触摸事件，不再另开 python
-        rawtouch.path([adbin.px(*p) for p in pts], step=55, dt=0.005, hold=0.04, first=0.15)
+        rawtouch.path([adbin.px(*p) for p in pts], step=55, dt=0.005, hold=0.04, first=0.15, conn=conn)
         mark(); return
     args = ['%.1f %.1f' % touch.to_screen(x, yy) for x, yy in pts]
     subprocess.run([str(ROOT / 'sweep'), '20', '5000', *' '.join(args).split()], check=True)
@@ -372,7 +372,7 @@ def rush_phase(keep, n, img=None):
     用户 2026-10-23：扫完不等。每一笔扫的同时截图，按这张图算下一笔：
     正在扫的颜色会被消掉，所以下一笔选别的颜色里「正下方没有正在扫的颜色」（不会往下掉）的最下面一个，
     上一笔一结束马上接着扫。"""
-    import threading
+    import os, threading
     img, b = settle(max_wait=1.2)
     if not is_rush(img):
         return
@@ -380,12 +380,19 @@ def rush_phase(keep, n, img=None):
     t0 = time.time(); k = 0
     nxt = rush_pick(b, keep, img)
     t_first = None                               # 第一次真正划下去的时间（乱舞倒计时从这里开始）
+    conn = None
+    if os.environ.get('PAZ_DEVICE') == 'bluestacks':
+        # 整个乱舞共用一条触摸连接：每笔各开一条时，边扫边截图会让上一笔的「松开」晚到或丢掉，
+        # 游戏以为手指一直按着，后面几笔全接在第一笔的链上（实测蓝色 14 连一直不松手）
+        sys.path.insert(0, str(ROOT))
+        import rawtouch
+        conn = rawtouch.RawTouch()
     while nxt and ((t_first is None and time.time() - t0 < 20) or (t_first is not None and time.time() - t_first < 10)):
         c, x, y, counts = nxt
         k += 1
         t_first = t_first or time.time()
         print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})  counts {counts}', flush=True)
-        th = threading.Thread(target=zigzag_sweep, args=(x, y + 10))
+        th = threading.Thread(target=zigzag_sweep, args=(x, y + 10, conn))
         th.start()
         time.sleep(0.15)                         # 等这一笔真正按下去、颜色开始被选中
         frame = shot()
@@ -403,6 +410,9 @@ def rush_phase(keep, n, img=None):
                 break
             b = board.detect(frame)
             nxt = rush_pick(b, keep, frame)
+    if conn:
+        conn.up(); time.sleep(0.05)              # 保险：再松一次手
+        conn.close()
     print(f'{time.time():.1f}', n, f'rush done: {k} sweeps in {time.time() - t0:.1f}s', flush=True)
     cv2.imwrite(str(LOG / f'rush_{n:03d}_end.png'), shot())
 

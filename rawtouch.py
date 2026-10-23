@@ -45,10 +45,11 @@ class RawTouch:
             self.p.kill()
 
 
-def path(pts, step=30, dt=0.008, hold=0.05, first=0.03):
-    """按下 → 沿 pts 每 step 像素一个点、每点间隔 dt 秒 → 松开（pts 为安卓像素）"""
+def path(pts, step=30, dt=0.008, hold=0.05, first=0.03, conn=None):
+    """按下 → 沿 pts 每 step 像素一个点、每点间隔 dt 秒 → 松开（pts 为安卓像素）。
+    conn：沿用已经开着的 RawTouch（乱舞一连好几笔共用一条连接，按下/松开的顺序才不会乱）"""
     import math
-    t = RawTouch()
+    t = conn or RawTouch()
     t.down(*pts[0]); time.sleep(first)
     cur = pts[0]
     for p in pts[1:]:
@@ -59,4 +60,5 @@ def path(pts, step=30, dt=0.008, hold=0.05, first=0.03):
         cur = p
     time.sleep(hold)
     t.up(); time.sleep(0.02)
-    t.close()
+    if conn is None:
+        t.close()
