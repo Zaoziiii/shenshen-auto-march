@@ -376,12 +376,11 @@ def rush_phase(keep, n, img=None):
             time.sleep(0.1)
             continue
         # 按数量从多到少试；先严格（核对颜色），再放宽；都不行就从最下面一个非保留色开始（保证乱舞能推进）
+        # 颜色优先（用户：乱舞别乱选色）：先定最多的颜色，严格/放宽都找不到起点才换下一种。
+        # 之前先对所有颜色严格找一遍：乱舞彩光下黄色常通不过颜色核对，就跳去扫了数量少的蓝/绿
         start = None
-        for strict in (True, False):
-            for c in sorted(counts, key=counts.get, reverse=True):
-                start = stable_start(b, c, keep, img, strict)
-                if start:
-                    break
+        for c in sorted(counts, key=counts.get, reverse=True):
+            start = stable_start(b, c, keep, img, True) or stable_start(b, c, keep, img, False)
             if start:
                 break
         if not start:
@@ -391,7 +390,7 @@ def rush_phase(keep, n, img=None):
         x, y = start
         t_first = t_first or time.time()
         zigzag_sweep(x, y + 20)                      # 扫完直接截下一张（截图本身要 ~0.4 秒，泡泡已经落得差不多）
-        print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})', flush=True)
+        print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})  counts {counts}', flush=True)
     print(f'{time.time():.1f}', n, f'rush done: {k} sweeps in {time.time() - t0:.1f}s', flush=True)
     cv2.imwrite(str(LOG / f'rush_{n:03d}_end.png'), shot())
 
