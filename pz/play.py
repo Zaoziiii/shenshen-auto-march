@@ -478,6 +478,19 @@ def extend_from(region, prefix, nb, budget=20000):
     return best
 
 
+def diamonds(before, during, pts):
+    """每个泡泡中间有没有选中时的白色菱形 ✦（比按下前多出明显的白色块）"""
+    a = cv2.cvtColor(before, cv2.COLOR_BGR2HSV).astype(np.int16)
+    d = cv2.cvtColor(during, cv2.COLOR_BGR2HSV).astype(np.int16)
+    out = []
+    for x, y in pts:
+        cy, cx = slice(y + 12, y + 36), slice(x - 12, x + 12)
+        wa = ((a[cy, cx, 1] < 60) & (a[cy, cx, 2] > 235)).mean()
+        wd = ((d[cy, cx, 1] < 60) & (d[cy, cx, 2] > 235)).mean()
+        out.append(wd - wa > 0.08)
+    return out
+
+
 def cancel_to_start(t, img, pts, k):
     """拖回起点取消（只剩起点 1 个时松手不算出手）。用户：BlueStacks 上往回拖经常没取消掉，
     直接松手就把已选的几个真的消掉了（长链变成两条短链）。所以松手前先截图确认只剩 1 个：
@@ -489,11 +502,15 @@ def cancel_to_start(t, img, pts, k):
                 time.sleep(0.1)
         time.sleep(0.3)
         d = shot()
-        c = count.read_count(d)
-        if (c is None or c <= 1) and not any(selected_flags(img, d, pts[:k])[1:]):
+        # 只剩 1 个时：左上没有计数标签，pts[1:k] 中间也没有选中的白色菱形 ✦
+        # （发白不算：能连的同色泡泡在只选 1 个时也可能还是淡色）
+        label = count.find_label(d)
+        dia = [p for p, f in zip(pts[1:k], diamonds(img, d, pts[1:k])) if f]
+        if label is None and not dia:
             t.up(); time.sleep(0.4)
             return True
-        print(f'{time.time():.1f}', f'cancel to start not confirmed (count {c}), attempt {attempt + 1}', flush=True)
+        cv2.imwrite(str(LOG / f'cancel_{int(time.time() * 10)}.png'), d)
+        print(f'{time.time():.1f}', f'cancel to start not confirmed (label {label is not None}, diamonds {len(dia)}), attempt {attempt + 1}', flush=True)
         for x, y in pts[1:k]:                     # 第二次前先沿原路走回去，再重新往回拖
             t.slow(x, y + 20)
     return False
