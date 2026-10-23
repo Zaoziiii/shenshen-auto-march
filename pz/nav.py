@@ -316,6 +316,10 @@ def buy_hearts(max_cost=50):
     if cost is not None and cost > max_cost:
         log(f'补充体力要 {cost} 宝玉，超过上限 {max_cost}，不买'); play.tap(350, 1325); return False
     owned = next((s for x, y, s in t if '所持' in s), '')
+    if not any('宝玉' in s for _, _, s in t):
+        # 活动关的体力弹窗不是「宝玉 50 个」（是活动道具，所持：1 之类）。用户：活动体力用完就停，不补
+        log(f'这是活动体力的补充弹窗（{owned}），不补充'); play.tap(350, 1325); time.sleep(1.5)
+        return 'event'
     log(f'用宝玉补充体力（{owned}）')
     play.tap(*(find(t, 'つかう') or (565, 778))); time.sleep(2)
     for _ in range(3):                                        # 可能的确认弹窗
