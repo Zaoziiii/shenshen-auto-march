@@ -328,7 +328,7 @@ HUE_OK = {'red': lambda h: h <= 12 or h >= 160, 'yellow': lambda h: 13 <= h <= 3
           'green': lambda h: 36 <= h <= 82, 'blue': lambda h: 84 <= h <= 120, 'black': lambda h: True}
 
 
-def stable_start(b, c, keep, img, strict=True):
+def stable_start(b, c, keep, img, strict=True, removing=()):
     """乱舞起点：该色最下面的泡泡，离保留色 ≥55px；strict 时还要按下点颜色对得上
     （乱舞的彩色光效会让颜色偏移，所以颜色只在 strict 时检查）"""
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -342,6 +342,9 @@ def stable_start(b, c, keep, img, strict=True):
                 continue
         if any(ck == keep and math.dist((x, y), (xk, yk)) < 55 for xk, yk, ck, *_ in b):
             continue
+        # 用户：要选不受上一笔影响的泡泡 —— 正下方（同一列）有正在被扫掉的颜色，它会往下掉，按下去时就不在这儿了
+        if any(abs(xr - x) < 50 and yr > y for xr, yr in removing):        # removing = 要被扫掉的泡泡位置
+            continue
         cands.append((y, x))
     if not cands:
         return None
@@ -349,49 +352,57 @@ def stable_start(b, c, keep, img, strict=True):
     return x, y
 
 
+def rush_pick(b, keep, img, removing=None, rem_pts=()):
+    """乱舞下一笔：除保留色（和正在扫掉的颜色）外数量最多的颜色，找它不受上一笔影响的最下面一个。
+    最多的颜色严格/放宽都找不到起点才换下一种。返回 (颜色, x, y, 各色数量) 或 None"""
+    counts = {}
+    for p in b:
+        if p[2] != keep and p[2] != removing:
+            counts[p[2]] = counts.get(p[2], 0) + 1
+    rem = list(rem_pts) + [p[:2] for p in b if p[2] == removing]
+    for c in sorted(counts, key=counts.get, reverse=True):
+        st = stable_start(b, c, keep, img, True, rem) or stable_start(b, c, keep, img, False, rem)
+        if st:
+            return c, st[0], st[1], counts
+    return None
+
+
 def rush_phase(keep, n, img=None):
-    """乱舞时间（用户定）：先等泡泡停稳（第一次划才开始计时）→ 不限时，一直循环到退出乱舞：
-    每一笔选「除保留色外当前最多的颜色」，找它最下面的一个，从它开始横向来回扫到顶部。"""
+    """乱舞时间（用户定）：先等泡泡停稳（第一次划才开始计时）→ 一直循环到退出乱舞。
+    用户 2026-10-23：扫完不等。每一笔扫的同时截图，按这张图算下一笔：
+    正在扫的颜色会被消掉，所以下一笔选别的颜色里「正下方没有正在扫的颜色」（不会往下掉）的最下面一个，
+    上一笔一结束马上接着扫。"""
+    import threading
     img, b = settle(max_wait=1.2)
     if not is_rush(img):
         return
     subprocess.run([G, 'focus'])
     t0 = time.time(); k = 0
+    nxt = rush_pick(b, keep, img)
     t_first = None                               # 第一次真正划下去的时间（乱舞倒计时从这里开始）
-    # 不限时：一直扫到退出乱舞。保险上限从「第一次划」开始算 10 秒（之前从发现乱舞算 15 秒，
-    # 前面找起点耽误了 13 秒，结果刚扫完三种颜色就被保险上限切断了）
-    while (t_first is None and time.time() - t0 < 20) or (t_first is not None and time.time() - t_first < 10):
+    while nxt and ((t_first is None and time.time() - t0 < 20) or (t_first is not None and time.time() - t_first < 10)):
+        c, x, y, counts = nxt
         k += 1
-        if k > 1:
-            img = shot()
-            if not is_rush(img):
-                break
-            b = board.detect(img)
-        # 用户：每一笔都扫「除保留色外当前数量最多的颜色」，不按固定顺序
-        counts = {}
-        for p in b:
-            if p[2] != keep:
-                counts[p[2]] = counts.get(p[2], 0) + 1
-        if not counts:
-            time.sleep(0.1)
-            continue
-        # 按数量从多到少试；先严格（核对颜色），再放宽；都不行就从最下面一个非保留色开始（保证乱舞能推进）
-        # 颜色优先（用户：乱舞别乱选色）：先定最多的颜色，严格/放宽都找不到起点才换下一种。
-        # 之前先对所有颜色严格找一遍：乱舞彩光下黄色常通不过颜色核对，就跳去扫了数量少的蓝/绿
-        start = None
-        for c in sorted(counts, key=counts.get, reverse=True):
-            start = stable_start(b, c, keep, img, True) or stable_start(b, c, keep, img, False)
-            if start:
-                break
-        if not start:
-            others = [p for p in b if p[2] != keep]
-            p0 = max(others, key=lambda p: p[1])
-            start, c = (p0[0], p0[1]), p0[2]
-        x, y = start
         t_first = t_first or time.time()
-        zigzag_sweep(x, y + 10)                      # 按在身体中间偏上（+20 太靠下，容易按到下面那个泡泡）
-        time.sleep(0.25)                             # 等消掉的位置落定再截图：截到还在掉的画面，起点会按到掉下来的别的颜色（保留色）
         print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})  counts {counts}', flush=True)
+        th = threading.Thread(target=zigzag_sweep, args=(x, y + 10))
+        th.start()
+        time.sleep(0.15)                         # 等这一笔真正按下去、颜色开始被选中
+        frame = shot()
+        on = is_rush(frame)
+        fb = board.detect(frame)
+        th.join()
+        if not on:
+            break
+        # 扫的时候被选中的泡泡在发光，可能认不出 → 扫之前那张图里这个颜色的位置也算「要被扫掉」
+        nxt = rush_pick(fb, keep, frame, removing=c, rem_pts=[p[:2] for p in b if p[2] == c])
+        b = fb
+        if not nxt:                              # 扫的同时找不到合适的：再截一张（这时已经扫完）
+            frame = shot()
+            if not is_rush(frame):
+                break
+            b = board.detect(frame)
+            nxt = rush_pick(b, keep, frame)
     print(f'{time.time():.1f}', n, f'rush done: {k} sweeps in {time.time() - t0:.1f}s', flush=True)
     cv2.imwrite(str(LOG / f'rush_{n:03d}_end.png'), shot())
 
