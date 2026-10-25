@@ -6,7 +6,24 @@ import cv2, numpy as np
 LV = {'blue': 1, 'green': 2, 'pink': 3, 'white': 4}
 
 
+_CACHE = {}
+
+
+def _key(img, bubbles):
+    return id(img), int(img[::97, ::89].sum()), len(bubbles)
+
+
 def detect(img, bubbles):
+    """同一张图、同一组泡泡一回合里会被问好几次（腾地方 / 火焰 / 合成方向 / 连线），算一次就缓存"""
+    k = _key(img, bubbles)
+    if k not in _CACHE:
+        if len(_CACHE) > 8:
+            _CACHE.clear()
+        _CACHE[k] = _detect(img, bubbles)
+    return list(_CACHE[k])
+
+
+def _detect(img, bubbles):
     H, W = img.shape[:2]
     if len(bubbles) < 8:
         return []

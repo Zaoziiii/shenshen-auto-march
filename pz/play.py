@@ -143,17 +143,18 @@ def same_layout(a, b, tol=12, miss=2):
     return bad <= miss
 
 
-def wait_stable(timeout=6):
+def wait_stable(timeout=6, first=None, with_board=False):
     """等泡泡落定：连续两次识别结果一致就放行。
-    不比较整张画面，因为泡泡待机晃动、炸弹火焰一直在动，像素永远不会完全静止。"""
-    prev = shot(); pb = board.detect(prev); t = time.time()
+    不比较整张画面，因为泡泡待机晃动、炸弹火焰一直在动，像素永远不会完全静止。
+    提速（2026-10-25）：可以把刚截的图当第一张（first）；两次截图之间不再多等（截图本身就要 ~0.4 秒）；
+    with_board=True 时连识别结果一起返回，调用方不用再识别一遍。"""
+    prev = first if first is not None else shot(); pb = board.detect(prev); t = time.time()
     while time.time() - t < timeout:
-        time.sleep(0.25)
         cur = shot(); cb = board.detect(cur)
         if same_layout(pb, cb):
-            return cur
+            return (cur, cb) if with_board else cur
         prev, pb = cur, cb
-    return prev
+    return (prev, pb) if with_board else prev
 
 
 def step(save=None, prefer=()):
@@ -219,8 +220,17 @@ def is_aim_screen(img):
 LOW_HP = 500
 
 
+def hp_fill(img):
+    """血条填充比例（实测和 当前/上限 基本一致：1319/4748 → 0.27）"""
+    r = cv2.cvtColor(img[1350:1362, 160:575], cv2.COLOR_BGR2HSV)
+    return float((((r[..., 1] > 110) & (r[..., 2] > 140)).mean(axis=0) > 0.5).mean())
+
+
 def read_hp(img):
-    """读我方血量（底部血条上的「358/4588」），返回 (当前, 上限)；读不出返回 None。约 0.2 秒"""
+    """读我方血量（底部血条上的「358/4588」），返回 (当前, 上限)；读不出返回 None。
+    文字识别要 ~0.2 秒：血条还剩 20% 以上时不读（低血量规则只看 <500）"""
+    if hp_fill(img) >= 0.2:
+        return None
     import nav
     for _, _, s in nav.ocr(img[1315:1370, 380:600]):
         m = s.replace(' ', '').split('/')
@@ -771,6 +781,16 @@ def give_up():
             return
         time.sleep(2.5)
 
+def tap_bomb(bomb, b):
+    """点炸弹，返回是否真的炸了（盘面变了）。先等 1 秒看；没变再等 1.2 秒看一次才算「不是炸弹」。
+    之前固定等 2.2~2.5 秒，每局点十几次炸弹就白等半分钟；剩下的落定交给下一轮 wait_stable"""
+    tap(bomb[0], bomb[1]); time.sleep(1.0)
+    if not same_layout(b, board.detect(shot())):
+        return True
+    time.sleep(1.2)
+    return not same_layout(b, board.detect(shot()))
+
+
 RING = 90                                       # 相邻泡泡圆心间距约 90px
 BOMB_REACH = {1: 1 * RING, 2: 2 * RING, 3: 3 * RING, 4: 0}   # 用户：1 级炸周围 1 圈邻居，2 级 2 圈（3 级按 3 圈估）
 
@@ -813,10 +833,9 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             print(f'{time.time():.1f}', n, 'rush (quick), keep', keep, flush=True)
             rush_phase(keep, n, quick)
             continue
-        img = wait_stable()
+        img, b = wait_stable(first=quick, with_board=True)
         cv2.imwrite(str(LOG / f'{int(time.time()*10)}.jpg'), cv2.resize(img, (354, 781)), [cv2.IMWRITE_JPEG_QUALITY, 80])
         if is_aim_screen(img):
-            b = board.detect(img)
             x = densest_column(b)
             print(f'{time.time():.1f}', n, 'aim swipe at x', x, flush=True)
             drag([(x, 560), (x, 760), (x, 1000)])
@@ -859,7 +878,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
         if ready and TEAM and len(TEAM) == 3:
             # 用户定的优先级：≥7 的长链 > 三日月R > 消除（范围大→小）> 转色 > 生成炸弹（多→少）> 其他辅助
             ready.sort(key=lambda i: TEAM[i].get('rank', 9))
-            b0 = board.detect(img)
+            b0 = b                                 # wait_stable 已经识别过
             if len(b0) >= 30 and not any(p[4] for p in b0):
                 ch0 = solver.best_chain(b0, prefer)
                 if len(ch0) >= 7:
@@ -879,7 +898,6 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                     ougi_fail[i] = ougi_fail.get(i, 0) + 1
                     print(f'{time.time():.1f}', n, f'ougi {i} tap failed x{ougi_fail[i]}', flush=True)
             continue
-        b = board.detect(img)
         if len(b) < 12:
             idle += 1
             print(f'{time.time():.1f}', n, 'no board', len(b), flush=True)
@@ -906,8 +924,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             pick = max(cand, key=lambda k: k[2]) if cand else None
             if pick:
                 print(f'{time.time():.1f}', n, f'bomb lv{pick[2]} (low hp {hp[0]}/{hp[1]})', flush=True)
-                tap(pick[0], pick[1]); time.sleep(2.2)
-                if same_layout(b, board.detect(shot())):
+                if not tap_bomb(pick, b):
                     dud.append(pick[:2])
                 continue
         if len(b) < 30 and not any(p[4] for p in b):
@@ -916,8 +933,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             pick = max(cand, key=lambda k: k[2]) if cand else None
             if pick:
                 print(f'{time.time():.1f}', n, f'bomb lv{pick[2]} (only {len(b)} bubbles, make room)', flush=True)
-                tap(pick[0], pick[1]); time.sleep(2.2)
-                if same_layout(b, board.detect(shot())):
+                if not tap_bomb(pick, b):
                     dud.append(pick[:2])
                 continue
         # 用户：优先消队伍角色奥义需要的颜色（奥义已经亮了的角色不用再攒）
@@ -938,8 +954,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             pick = max(cand, key=lambda k: k[2]) if cand else None
             if pick:
                 print(f'{time.time():.1f}', n, f'bomb lv{pick[2]} (longest chain only {longest})', flush=True)
-                tap(pick[0], pick[1]); time.sleep(2.2)
-                if same_layout(b, board.detect(shot())):
+                if not tap_bomb(pick, b):
                     dud.append(pick[:2])
                 continue
         if not n_flame:
@@ -958,8 +973,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                 bomb, sc = bomb_for_flames(b, cand)
                 if bomb and (urgent or sc > in_chain):
                     print(f'{time.time():.1f}', n, f'bomb lv{bomb[2]} hits {sc} flames (turn {flame_age + 1}, chain {in_chain}/{n_flame})', flush=True)
-                    tap(bomb[0], bomb[1]); time.sleep(2.5)
-                    if same_layout(b, board.detect(shot())):
+                    if not tap_bomb(bomb, b):
                         dud.append(bomb[:2])
                         print(f'{time.time():.1f}', n, f'not a bomb at {bomb[:2]}, skip', flush=True)
                     continue

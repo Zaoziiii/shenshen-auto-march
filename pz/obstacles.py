@@ -20,8 +20,20 @@ def _color_ok(n, img, x, y):
 NEAR = 105            # 泡泡中心(x, y+20) 到障碍物中心 ≤ 这个距离算「旁边」
 
 
+_CACHE = {}
+
+
 def detect(img):
-    """返回 {名字: [(x, y), ...]}（障碍物中心，截图像素）"""
+    """返回 {名字: [(x, y), ...]}（障碍物中心，截图像素）。同一张图只算一次"""
+    k = (id(img), int(img[::97, ::89].sum()))
+    if k not in _CACHE:
+        if len(_CACHE) > 8:
+            _CACHE.clear()
+        _CACHE[k] = _detect(img)
+    return {n: list(v) for n, v in _CACHE[k].items()}
+
+
+def _detect(img):
     area = img[450:1100]                  # 再往下是角色区，会误认
     out = {}
     for n, t in TPL.items():
