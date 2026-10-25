@@ -14,12 +14,33 @@ def obst_score(bubbles, ch):
     return SHELL_BONUS * near(OBST.get('shell', [])) - BOX_PENALTY * near(OBST.get('box', []))
 
 
+def _blocked(a, b, others, r=40):
+    """a→b 这一笔中间是否经过别的同色泡泡（手指划过就会被游戏选上，顺序就乱了）"""
+    ax, ay = a[:2]; bx, by = b[:2]
+    dx, dy = bx - ax, by - ay
+    L2 = dx * dx + dy * dy
+    if L2 == 0:
+        return False
+    for c in others:
+        t = ((c[0] - ax) * dx + (c[1] - ay) * dy) / L2
+        if 0.15 < t < 0.85:
+            px, py = ax + t * dx, ay + t * dy
+            if (c[0] - px) ** 2 + (c[1] - py) ** 2 < r * r:
+                return True
+    return False
+
+
 def neighbors(bubbles):
+    """同色、眼睛距离 ≤ LINK 的算相邻。用户：路过同色的不能略过 ——
+    两个泡泡连线中间正好压着另一个同色泡泡时，这条边不算（得经过中间那个）"""
     nb = {i: [] for i in range(len(bubbles))}
     for i, a in enumerate(bubbles):
         for j, b in enumerate(bubbles):
             if i < j and a[2] == b[2] and math.dist(a[:2], b[:2]) <= LINK:
-                nb[i].append(j); nb[j].append(i)
+                others = [c for k, c in enumerate(bubbles) if k != i and k != j and c[2] == a[2]
+                          and math.dist(c[:2], a[:2]) < math.dist(a[:2], b[:2]) + 40]
+                if not _blocked(a, b, others):
+                    nb[i].append(j); nb[j].append(i)
     return nb
 
 
