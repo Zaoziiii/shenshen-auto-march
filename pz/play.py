@@ -828,6 +828,8 @@ def run(max_moves=120, prefer=(), max_minutes=20):
     dud = []          # 点过但没反应的「炸弹」位置
     flame_age = 0     # 火焰已经存在了几次行动
     ougi_fail = {}    # 点了没反应的奥义次数（连续 3 次就先不点了，免得卡住）
+    banned = []       # (x, y, 到第几步为止)：同一条链连了 3 次盘面都没变，先别再连这些泡泡
+    last_sig, repeat = None, 0
     t_end = time.time() + max_minutes * 60
     while n < max_moves and time.time() < t_end:
         check_stop()
@@ -838,6 +840,9 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             rush_phase(keep, n, quick)
             continue
         img, b = wait_stable(first=quick, with_board=True)
+        banned = [q for q in banned if q[2] > n]
+        if banned:
+            b = [p for p in b if all(math.dist(p[:2], q[:2]) > 30 for q in banned)]
         cv2.imwrite(str(LOG / f'{int(time.time()*10)}.jpg'), cv2.resize(img, (354, 781)), [cv2.IMWRITE_JPEG_QUALITY, 80])
         if is_aim_screen(img):
             x = densest_column(b)
@@ -907,6 +912,12 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             print(f'{time.time():.1f}', n, 'no board', len(b), flush=True)
             import nav
             tt = nav.ocr(img)
+            if nav.find(tt, '通信エラー') and nav.find(tt, 'リトライ'):      # 对战中断线：点リトライ接着打
+                print(f'{time.time():.1f}', n, 'network error -> retry', flush=True)
+                tap(*nav.find(tt, 'リトライ'))
+                idle = 0
+                time.sleep(4)
+                continue
             if nav.find(tt, 'コンティニュー') or nav.find(tt, '撤退確認'):   # 颜色没认出的死亡弹窗
                 print(f'{time.time():.1f}', n, 'dead (by text) -> give up', flush=True)
                 give_up()
@@ -983,6 +994,17 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                     continue
         ch = orient_for_merge(b, ch, bombs.detect(img, b))
         path = [b[i] for i in ch]
+        sig = tuple((p[0] // 20, p[1] // 20, p[2]) for p in path)
+        repeat = repeat + 1 if sig == last_sig else 0
+        last_sig = sig
+        if repeat >= 3 and len(path) >= 2:
+            # 同一条链（同样位置、同样颜色）连了 3 次还在原地：多半是颜色认错了（游戏不让连），
+            # 有火焰就跳过火焰泡泡，否则跳过整条链，5 步之后再看
+            bad = [p for p in path if p[4]] or path
+            banned += [(p[0], p[1], n + 5) for p in bad]
+            print(f'{time.time():.1f}', n, f'same chain x{repeat + 1} without effect, skip {[(p[0], p[1], p[2]) for p in bad]}', flush=True)
+            last_sig, repeat = None, 0
+            continue
         print(f'{time.time():.1f}', n, 'chain', len(path), path[0][2] if path else None, flush=True)
         if len(path) >= 2:
             chain_with_rescan(img, b, ch)

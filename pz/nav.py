@@ -172,6 +172,10 @@ def goto_team_select(stage, team=None):
                 shift = 450                                          # 一个都没看到：往前翻
             slow_pan(max(-520, min(520, shift)))
             time.sleep(1); continue
+        # 「通信エラーが発生しました。」（タイトルへ / リトライ）：点リトライ，不回标题
+        if find(t, '通信エラー') and find(t, 'リトライ'):
+            log('通信错误，点「リトライ」')
+            play.tap(*find(t, 'リトライ')); time.sleep(4); continue
         # 弹窗（升级、课题达成、通知等）：点「とじる / OK / 閉じる」关掉
         btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
         if btn:
