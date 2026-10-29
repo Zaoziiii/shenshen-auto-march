@@ -85,6 +85,44 @@ def _bs_reconnect():
 
 
 def shot():
+    """截图；画面上是「通信エラー」弹窗时先点リトライ再截（对战、结算、乱舞、补心任何时候都可能弹出）"""
+    global _IN_RETRY
+    img = _shot()
+    if _IN_RETRY or not looks_like_retry(img):
+        return img
+    _IN_RETRY = True
+    try:
+        import nav
+        for _ in range(5):
+            tt = nav.ocr(img)
+            if not (nav.find(tt, '通信エラー') and nav.find(tt, 'リトライ')):
+                break
+            print(f'{time.time():.1f} 通信错误，点「リトライ」', flush=True)
+            tap(*nav.find(tt, 'リトライ'))
+            time.sleep(4)
+            img = _shot()
+            if not looks_like_retry(img):
+                break
+    finally:
+        _IN_RETRY = False
+    return img
+
+
+_IN_RETRY = False
+
+
+def looks_like_retry(img):
+    """通信错误弹窗的颜色：米色正文框 + 下沿绿条 + 右下橙色「リトライ」按钮（只是初筛，确认靠 OCR）"""
+    h = cv2.cvtColor(img[640:1370], cv2.COLOR_BGR2HSV)
+    panel = h[60:260, 80:630].reshape(-1, 3)
+    green = h[295:320, 60:650].reshape(-1, 3)
+    btn = h[670:725, 400:590].reshape(-1, 3)
+    return ((panel[:, 1] < 50) & (panel[:, 2] > 215)).mean() > 0.85 \
+        and ((green[:, 0] >= 36) & (green[:, 0] <= 52) & (green[:, 1] > 140)).mean() > 0.7 \
+        and ((btn[:, 0] >= 8) & (btn[:, 0] <= 26) & (btn[:, 1] > 200)).mean() > 0.6
+
+
+def _shot():
     import os
     if os.environ.get('PAZ_DEVICE') == 'bluestacks':
         for _ in range(5):
