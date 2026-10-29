@@ -969,6 +969,11 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                 idle = 0
                 time.sleep(4)
                 continue
+            if nav.day_changed(tt):                                        # 换天：这局作废，游戏自己回绘卷船
+                print(f'{time.time():.1f}', n, 'day changed -> はい, round void', flush=True)
+                tap(*nav.day_changed(tt))
+                time.sleep(5)
+                return None
             if nav.find(tt, 'コンティニュー') or nav.find(tt, '撤退確認'):   # 颜色没认出的死亡弹窗
                 print(f'{time.time():.1f}', n, 'dead (by text) -> give up', flush=True)
                 give_up()

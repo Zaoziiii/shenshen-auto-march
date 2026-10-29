@@ -132,6 +132,13 @@ def slow_pan(dx, y=560):
     t.up()
 
 
+def day_changed(t):
+    """换天弹窗（日付が変わりました。絵巻船に戻ります。）的「はい」按钮位置，没有就 None"""
+    if find(t, '日付が変わ') or find(t, '絵巻船に戻'):
+        return next(((x, y) for x, y, w in t if w.strip() == 'はい'), (355, 1335))
+    return None
+
+
 def goto_team_select(stage, team=None):
     ch, no = stage.split('-')
     ch = int(ch)
@@ -172,6 +179,8 @@ def goto_team_select(stage, team=None):
                 shift = 450                                          # 一个都没看到：往前翻
             slow_pan(max(-520, min(520, shift)))
             time.sleep(1); continue
+        if day_changed(t):                         # 换天：「日付が変わりました。絵巻船に戻ります。」→ はい
+            log('换天了，点「はい」回绘卷船'); play.tap(*day_changed(t)); time.sleep(5); continue
         # 「通信エラーが発生しました。」（タイトルへ / リトライ）：先リトライ，3 次不行回标题页
         if find(t, '通信エラー') and find(t, 'リトライ'):
             play.shot(); time.sleep(1); continue     # 由 play.shot 统一处理（重试 3 次不行就回标题页）
