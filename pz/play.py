@@ -97,7 +97,19 @@ def shot():
             tt = nav.ocr(img)
             if not (nav.find(tt, '通信エラー') and nav.find(tt, 'リトライ')):
                 break
-            print(f'{time.time():.1f} 通信错误，点「リトライ」', flush=True)
+            now = time.time()
+            _RETRIES[:] = [r for r in _RETRIES if now - r < 180]
+            if len(_RETRIES) >= 3 and nav.find(tt, 'タイトルへ'):
+                # 2026-10-29：网络正常但服务器一直不收（卡太久的那局已失效），点リトライ 弹窗消失几秒又回来；
+                # 3 分钟内重试 3 次都不行 → 回标题页，由导航点「はじめる」重新进游戏
+                print(f'{time.time():.1f} 通信错误重试 {len(_RETRIES)} 次都不行，点「タイトルへ」回标题页', flush=True)
+                tap(*nav.find(tt, 'タイトルへ'))
+                _RETRIES.clear()
+                time.sleep(8)
+                img = _shot()
+                break
+            _RETRIES.append(now)
+            print(f'{time.time():.1f} 通信错误，点「リトライ」（第 {len(_RETRIES)} 次）', flush=True)
             tap(*nav.find(tt, 'リトライ'))
             time.sleep(4)
             img = _shot()
@@ -109,6 +121,7 @@ def shot():
 
 
 _IN_RETRY = False
+_RETRIES = []        # 最近点「リトライ」的时间
 
 
 def looks_like_retry(img):
