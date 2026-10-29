@@ -184,6 +184,9 @@ def goto_team_select(stage, team=None):
         # 「通信エラーが発生しました。」（タイトルへ / リトライ）：先リトライ，3 次不行回标题页
         if find(t, '通信エラー') and find(t, 'リトライ'):
             play.shot(); time.sleep(1); continue     # 由 play.shot 统一处理（重试 3 次不行就回标题页）
+        # 换天后：狐狸「昨日の日報の確認をお願いします！」没有按钮 → 点它抱着的卷轴，打开日报（日报本身用 とじる 关）
+        if find(t, '日報の確認'):
+            log('换天后的日报提示，点卷轴'); play.tap(355, 950); time.sleep(3); continue
         # 弹窗（升级、课题达成、通知等）：点「とじる / OK / 閉じる」关掉
         btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
         if btn:
