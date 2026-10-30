@@ -102,6 +102,7 @@ struct ContentView: View {
     @StateObject var r = Runner()
     @AppStorage("device") var device = "iphone"
     @AppStorage("stage") var stage = "3-29"
+    @AppStorage("event") var event = false          // 刷活动「大讨伐」（固定按钮，不用手填关卡）
     @AppStorage("team") var team = ""
     @AppStorage("keep") var keep = "auto"
     @AppStorage("mode") var mode = 0
@@ -117,14 +118,27 @@ struct ContentView: View {
                 Picker("设备", selection: $device) {
                     Text("iPhone 镜像").tag("iphone"); Text("BlueStacks Air").tag("bluestacks")
                 }.pickerStyle(.segmented)
-                TextField("关卡（章-话，活动填 大讨伐）", text: $stage).help("例如 3-29；填 大讨伐 刷活动：按泡泡分值连线、乱舞保留首领颜色、用活动票")
-                TextField("队伍（队名或 1~5，空=当前队）", text: $team)
-                Picker("乱舞保留色", selection: $keep) {
-                    Text("自动（按队伍奥义）").tag("auto"); Text("红").tag("red"); Text("黄").tag("yellow"); Text("绿").tag("green"); Text("蓝").tag("blue")
+                Picker("刷什么", selection: $event) {
+                    Text("普通关卡").tag(false); Text("大讨伐活动").tag(true)
+                }.pickerStyle(.segmented)
+                    .help("大讨伐活动：按泡泡分值连线（小 1 / 中 3 / 大 5）、乱舞保留首领颜色、用活动票（不补充）")
+                if !event {
+                    TextField("关卡（章-话）", text: $stage).help("例如 3-29")
                 }
-                Picker("刷关方式", selection: $mode) { Text("刷到心用完").tag(0); Text("刷够指定次数").tag(1) }
+                TextField("队伍（队名或 1~5，空=当前队）", text: $team)
+                if !event {
+                    Picker("乱舞保留色", selection: $keep) {
+                        Text("自动（按队伍奥义）").tag("auto"); Text("红").tag("red"); Text("黄").tag("yellow"); Text("绿").tag("green"); Text("蓝").tag("blue")
+                    }
+                } else {
+                    Text("乱舞保留色：自动（首领的颜色）").foregroundStyle(.secondary)
+                }
+                Picker("刷关方式", selection: $mode) { Text(event ? "刷到活动票用完" : "刷到心用完").tag(0); Text("刷够指定次数").tag(1) }
                     .pickerStyle(.segmented)
-                if mode == 1 {
+                if mode == 1 && event {
+                    Stepper("次数：\(count)（票先用完也会停）", value: $count, in: 1...999)
+                }
+                if mode == 1 && !event {
                     Stepper("次数：\(count)", value: $count, in: 1...999)
                     Picker("心用完后", selection: $heartOut) {
                         Text("停止").tag("stop"); Text("等心恢复").tag("wait"); Text("用 50 宝玉补充 10 颗心").tag("buy")
@@ -136,7 +150,7 @@ struct ContentView: View {
             }
             HStack {
                 Button(r.running ? "运行中…" : "开始") {
-                    r.start(["device": device, "stage": stage, "team": team, "keep": keep,
+                    r.start(["device": device, "stage": event ? "大讨伐" : stage, "team": team, "keep": keep,
                              "count": mode == 1 ? count : 0, "heart_out": mode == 1 ? heartOut : "stop", "close_game": closeGame,
                              "delay_min": delayH * 60, "repeat_min": repeatH * 60])
                 }.disabled(r.running).keyboardShortcut(.return)
