@@ -117,7 +117,7 @@ struct ContentView: View {
                 Picker("设备", selection: $device) {
                     Text("iPhone 镜像").tag("iphone"); Text("BlueStacks Air").tag("bluestacks")
                 }.pickerStyle(.segmented)
-                TextField("关卡（章-话，活动填 event）", text: $stage).help("例如 3-29；填 event 刷活动「大討伐」：按泡泡分值连线、乱舞保留首领颜色、用活动票")
+                TextField("关卡（章-话，活动填 大讨伐）", text: $stage).help("例如 3-29；填 大讨伐 刷活动：按泡泡分值连线、乱舞保留首领颜色、用活动票")
                 TextField("队伍（队名或 1~5，空=当前队）", text: $team)
                 Picker("乱舞保留色", selection: $keep) {
                     Text("自动（按队伍奥义）").tag("auto"); Text("红").tag("red"); Text("黄").tag("yellow"); Text("绿").tag("green"); Text("蓝").tag("blue")

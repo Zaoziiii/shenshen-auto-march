@@ -209,7 +209,7 @@ def goto_team_select(stage, team=None):
 
 
 # ---------- 活动（大討伐 BIG ト餓鬼）----------
-EVENT_STAGES = ('event', '活动', 'イベント')
+EVENT_STAGES = ('大讨伐', '大討伐', 'event', '活动', 'イベント')   # App「关卡」填 大讨伐（旧写法 event 也认）
 
 
 def tickets(img):
