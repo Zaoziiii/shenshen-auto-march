@@ -884,6 +884,7 @@ def densest_column(bubbles, half=55):
 def run(max_moves=120, prefer=(), max_minutes=20):
     LOG.mkdir(exist_ok=True)
     idle = 0
+    thin = 0          # 连续几次看到棋盘不完整
     n = 0
     dud = []          # 点过但没反应的「炸弹」位置
     flame_age = 0     # 火焰已经存在了几次行动
@@ -997,10 +998,13 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             continue
         idle = 0
         bb_all = bombs.detect(img, b)
-        if board.area(b) + 2 * len(bb_all) < 30:
+        if board.area(b) + 2 * len(bb_all) < 30 and thin < 4:
             # 敌人奥义特写、动画中途等：棋盘不完整，先别出手（炸弹多时泡泡少是正常的）
+            # 最多等 4 次：活动关会有灰色石头占地方，泡泡一直凑不够 30 个（2026-10-31 卡死过）
+            thin += 1
             time.sleep(0.5)
             continue
+        thin = 0
         hp = read_hp(img)
         if hp and hp[0] < LOW_HP:
             # 用户：血量低于 500 时，场上有炸弹就点掉（先点等级最高的；点炸弹不算出手）

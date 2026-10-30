@@ -2,6 +2,7 @@
 python pz/farm.py config.json
 config: {"stage": "3-29", "team": "Trans" 或 "1", "keep": "auto"/"red"/..., 
          "count": 0(=刷到心用完) 或 N, "heart_out": "stop"/"wait"/"buy"}"""
+import re
 import json, sys, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -105,6 +106,9 @@ def main(cfg):
         img = play.shot()
         in_battle = (len(play.board.detect(img)) >= 25 or play.is_rush(img) or play.is_aim_screen(img)
                      or play.is_result(img) or play.is_continue_dialog(img) or play.is_retreat_dialog(img))
+        if not in_battle:
+            # 泡泡少（活动关的灰色石头占地方）时按血条数字认：上面敌人 2681/8500、下面我方 3206/4748
+            in_battle = sum(bool(re.fullmatch(r'\d+/\d+', w.strip())) for _, _, w in nav.ocr(img)) >= 2
         if in_battle and event:
             # 活动首页（橙色「挑戦」+ 米色小路）颜色上像结算页：用文字再确认一次
             t = nav.ocr(img)
