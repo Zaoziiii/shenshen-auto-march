@@ -208,6 +208,64 @@ def goto_team_select(stage, team=None):
     return False
 
 
+# ---------- 活动（大討伐 BIG ト餓鬼）----------
+EVENT_STAGES = ('event', '活动', 'イベント')
+
+
+def tickets(img):
+    """活动票数（活动页 / 挑战页左上角，不能补充）；读不出返回 None"""
+    for x, y, s in ocr(img[200:290, 0:330]):
+        m = re.match(r'\s*(\d+)', s)               # 有时和旁边的「+」读成一个词：「22＋」
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def is_event_battle_page(t):
+    """活动挑战页：首领 + 队伍 +「戦う」（消耗 1 张票）"""
+    return find(t, '戦う') and (find(t, '有利刀種') or find(t, 'BIG') or find(t, 'ボーナス'))
+
+
+def goto_event(team=None):
+    """走到活动挑战页（有「戦う」的那页），可选切换队伍"""
+    for _ in range(25):
+        img = play.shot(); t = ocr(img)
+        if is_event_battle_page(t):
+            if team:
+                got = select_team(team)
+                if got is None:
+                    log('找不到队伍', team); return False
+                log('队伍:', got)
+            return True
+        if find(t, '挑戦') and find(t, '報酬リスト'):      # 活动首页 → 挑戦
+            play.tap(*find(t, '挑戦')); time.sleep(3); continue
+        if find(t, 'コンティニュー確認') or find(t, '撤退確認'):
+            play.give_up(); continue
+        if day_changed(t):
+            log('换天了，点「はい」'); play.tap(*day_changed(t)); time.sleep(5); continue
+        if find(t, '日報の確認'):
+            play.tap(355, 950); time.sleep(3); continue
+        if find(t, '次へ'):
+            play.tap(*find(t, '次へ')); time.sleep(3); continue
+        if find(t, '通信エラー') and find(t, 'リトライ'):
+            play.shot(); time.sleep(1); continue
+        # 主页点「イベント」弹出的活动列表（标题「イベント」在 y≈423）→ 用户：点第一个活动
+        if any(w.strip() == 'イベント' and 400 <= y <= 445 for x, y, w in t) and find(t, 'とじる'):
+            log('活动列表，点第一个活动'); play.tap(355, 545); time.sleep(3.5); continue
+        btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
+        if btn:
+            log('关闭弹窗：', ' / '.join(w for _, _, w in t[:4]))
+            play.tap(*btn); time.sleep(2); continue
+        if find(t, '召喚') or find(t, '戦支度') or find(t, 'よろず屋'):   # 主页 → 左下「イベント」
+            play.tap(80, 1225); time.sleep(3.5); continue
+        if find(t, 'はじめる'):
+            play.tap(*find(t, 'はじめる')); time.sleep(6); continue
+        time.sleep(2)
+    cv2.imwrite(str(ROOT / 'refs' / f'nav_fail_{int(time.time())}.png'), img)
+    log('走不到活动挑战页，最后的画面存到了 refs/nav_fail_*.png，识别到的文字：', ' / '.join(w for _, _, w in t[:8]))
+    return False
+
+
 # ---------- 掉落 ----------
 def _catalog():
     cat = json.load(open(ITEMS / 'catalog.json'))

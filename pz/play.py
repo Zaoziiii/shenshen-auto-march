@@ -401,6 +401,15 @@ HUE_OK = {'red': lambda h: h <= 12 or h >= 160, 'yellow': lambda h: 13 <= h <= 3
           'green': lambda h: 36 <= h <= 82, 'blue': lambda h: 84 <= h <= 120, 'black': lambda h: True}
 
 
+def boss_color(img):
+    """活动关首领（盘面上方的大泡泡）的颜色：首领色的泡泡会多生成。看首领身体的色相，排除紫色光效。"""
+    h = cv2.cvtColor(img[300:460, 250:440], cv2.COLOR_BGR2HSV).reshape(-1, 3)
+    h = h[(h[:, 1] > 120) & (h[:, 2] > 120) & ~((h[:, 0] >= 125) & (h[:, 0] <= 159))]
+    votes = {c: sum(1 for q in h[:, 0] if f(int(q))) for c, f in HUE_OK.items() if c != 'black'}
+    c = max(votes, key=votes.get)
+    return c if votes[c] > 0.3 * len(h) else None
+
+
 def stable_start(b, c, keep, img, strict=True, removing=()):
     """乱舞起点：该色最下面的泡泡，离保留色 ≥55px；strict 时还要按下点颜色对得上
     （乱舞的彩色光效会让颜色偏移，所以颜色只在 strict 时检查）"""
@@ -762,9 +771,9 @@ def chain_with_rescan(img, b, ch):
     best = []
     for s0 in range(len(region)):
         cand = solver.longest_from(region, s0, nb, budget=20000)
-        if (sum(region[i][4] for i in cand), len(cand)) > (sum(region[i][4] for i in best), len(best)):
+        if (sum(region[i][4] for i in cand), solver.value(region, cand), len(cand)) > (sum(region[i][4] for i in best), solver.value(region, best), len(best)):
             best = cand
-    if len(best) <= len(path):
+    if (solver.value(region, best), len(best)) <= (solver.value(b, ch), len(path)):     # 普通关分值 = 长度
         return finish(path[2:], f'white {len(white)}, keep plan (region path {len(best)}, link {L})')
     new = [region[i] for i in best]
     if best[0] == 0 and len(best) > 1 and best[1] == 1:
@@ -886,11 +895,15 @@ def run(max_moves=120, prefer=(), max_minutes=20):
         check_stop()
         quick = shot()
         if is_rush(quick):                 # 乱舞倒计时可能已经在走，不能先等落定
-            keep = prefer[0] if prefer else None
+            keep = prefer[0] if prefer and prefer[0] in HUE_OK else None
             print(f'{time.time():.1f}', n, 'rush (quick), keep', keep, flush=True)
             rush_phase(keep, n, quick)
             continue
         img, b = wait_stable(first=quick, with_board=True)
+        if prefer == ('boss',) and len(b) >= 12:          # 活动关：乱舞保留首领的颜色（首领色泡泡生成得多）
+            c = boss_color(img)
+            prefer = (c,) if c else ()
+            print(f'{time.time():.1f}', n, 'boss color', c, flush=True)
         banned = [q for q in banned if q[2] > n]
         if banned:
             b = [p for p in b if all(math.dist(p[:2], q[:2]) > 30 for q in banned)]
@@ -902,7 +915,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             time.sleep(4)
             continue
         if is_rush(img):
-            keep = prefer[0] if prefer else None
+            keep = prefer[0] if prefer and prefer[0] in HUE_OK else None
             print(f'{time.time():.1f}', n, 'rush, keep', keep, flush=True)
             rush_phase(keep, n, img)
             continue
@@ -939,7 +952,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             # 用户定的优先级：≥7 的长链 > 三日月R > 消除（范围大→小）> 转色 > 生成炸弹（多→少）> 其他辅助
             ready.sort(key=lambda i: TEAM[i].get('rank', 9))
             b0 = b                                 # wait_stable 已经识别过
-            if len(b0) >= 30 and not any(p[4] for p in b0):
+            if board.area(b0) >= 30 and not any(p[4] for p in b0):
                 ch0 = solver.best_chain(b0, prefer)
                 if len(ch0) >= 7:
                     ready = []              # 先连长链，奥义留到下一步
@@ -984,7 +997,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             continue
         idle = 0
         bb_all = bombs.detect(img, b)
-        if len(b) + 2 * len(bb_all) < 30:
+        if board.area(b) + 2 * len(bb_all) < 30:
             # 敌人奥义特写、动画中途等：棋盘不完整，先别出手（炸弹多时泡泡少是正常的）
             time.sleep(0.5)
             continue
@@ -998,7 +1011,7 @@ def run(max_moves=120, prefer=(), max_minutes=20):
                 if not tap_bomb(pick, b):
                     dud.append(pick[:2])
                 continue
-        if len(b) < 30 and not any(p[4] for p in b):
+        if board.area(b) < 30 and not any(p[4] for p in b):
             # 用户：泡泡少于 30 个（炸弹占了地方）才点炸弹腾出格子，先点等级最高的；平时炸弹留着合成
             cand = [k for k in bb_all if k[2] < 4 and all(math.dist(k[:2], d) > 60 for d in dud)]
             pick = max(cand, key=lambda k: k[2]) if cand else None
@@ -1061,7 +1074,8 @@ def run(max_moves=120, prefer=(), max_minutes=20):
             print(f'{time.time():.1f}', n, f'same chain x{repeat + 1} without effect, skip {[(p[0], p[1], p[2]) for p in bad]}', flush=True)
             last_sig, repeat = None, 0
             continue
-        print(f'{time.time():.1f}', n, 'chain', len(path), path[0][2] if path else None, flush=True)
+        print(f'{time.time():.1f}', n, 'chain', len(path), path[0][2] if path else None,
+              f'({solver.value(b, ch)} pts)' if board.SIZE else '', flush=True)
         if len(path) >= 2:
             chain_with_rescan(img, b, ch)
             n += 1

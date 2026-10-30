@@ -1,10 +1,16 @@
 """找最长的同色连线。泡泡之间眼睛距离 <= LINK 就算相邻。"""
 import math
+from board import size
 
 LINK = 112
 # 当前盘面的障碍物（play 每回合设置）：{'shell': [(x, y)], 'box': [(x, y)]}
 OBST = {}
 SHELL_BONUS, BOX_PENALTY = 0, 0        # 用户（2026-10-22）：贝壳、箱子不加减分
+
+
+def value(bubbles, path):
+    """链的分值：活动关小/中/大泡泡 1/3/5 分；普通关每个 1 分（= 长度）"""
+    return sum(size(bubbles[i])[1] for i in path)
 
 
 def obst_score(bubbles, ch):
@@ -36,7 +42,8 @@ def neighbors(bubbles):
     nb = {i: [] for i in range(len(bubbles))}
     for i, a in enumerate(bubbles):
         for j, b in enumerate(bubbles):
-            if i < j and a[2] == b[2] and math.dist(a[:2], b[:2]) <= LINK:
+            # 活动关泡泡大小不一：相邻距离按两个泡泡的身体缩放放大
+            if i < j and a[2] == b[2] and math.dist(a[:2], b[:2]) <= LINK * (size(a)[0] + size(b)[0]) / 2:
                 others = [c for k, c in enumerate(bubbles) if k != i and k != j and c[2] == a[2]
                           and math.dist(c[:2], a[:2]) < math.dist(a[:2], b[:2]) + 40]
                 if not _blocked(a, b, others):
@@ -45,19 +52,20 @@ def neighbors(bubbles):
 
 
 def longest_chain(bubbles, budget=200000, color=None):
-    """DFS 找最长简单路径；返回泡泡下标列表。color 指定只找某种颜色"""
+    """DFS 找分值最高（普通关 = 最长）的简单路径；返回泡泡下标列表。color 指定只找某种颜色"""
     nb = neighbors(bubbles)
-    best = []
+    best, best_k = [], (0, 0)
     steps = 0
     def dfs(path, seen):
-        nonlocal best, steps
+        nonlocal best, best_k, steps
         steps += 1
-        if len(path) > len(best):
-            best = path[:]
+        k = (value(bubbles, path), len(path))
+        if k > best_k:
+            best, best_k = path[:], k
         if steps > budget:
             return
-        # 先走邻居少的（Warnsdorff 启发），容易走得更长
-        for j in sorted(nb[path[-1]], key=lambda k: len(nb[k])):
+        # 先走分值高的（活动关），再走邻居少的（Warnsdorff 启发），容易走得更长
+        for j in sorted(nb[path[-1]], key=lambda k: (-size(bubbles[k])[1], len(nb[k]))):
             if j not in seen:
                 seen.add(j); path.append(j)
                 dfs(path, seen)
@@ -75,12 +83,12 @@ def longest_from(bubbles, start, nb, budget=20000):
     def dfs(path, seen):
         nonlocal best, steps
         steps += 1
-        key = lambda p: (sum(1 for i in p if bubbles[i][4]), len(p))
+        key = lambda p: (sum(1 for i in p if bubbles[i][4]), value(bubbles, p), len(p))
         if key(path) > key(best):
             best = path[:]
         if steps > budget:
             return
-        for j in sorted(nb[path[-1]], key=lambda k: (not bubbles[k][4], len(nb[k]))):
+        for j in sorted(nb[path[-1]], key=lambda k: (not bubbles[k][4], -size(bubbles[k])[1], len(nb[k]))):
             if j not in seen:
                 seen.add(j); path.append(j); dfs(path, seen); path.pop(); seen.discard(j)
     dfs([start], {start})
@@ -147,6 +155,7 @@ def chain_clearing_cluster(bubbles, budget=20000):
 
 def best_chain_team(bubbles, need, need_bonus=3):
     """用户（2026-10-22）：最大化连接长链。所有颜色都参与，按长度比；
+    活动关（2026-10-31）：长度换成分值（小/中/大 = 1/3/5），其余规则一样。
     队伍奥义需要的颜色加 3 分（用户 2026-10-22：比最长链短 3 个以内就优先奥义色；同分取更长的），火焰泡泡每个 +8。
     （之前「不需要的颜色要 ≥7 个才连」会放着 6 连的蓝色去连 2 连的黄色，取消）"""
     need = set(need or ())
@@ -155,14 +164,14 @@ def best_chain_team(bubbles, need, need_bonus=3):
         ch = longest_chain(bubbles, budget=40000, color=c)
         if len(ch) < 2:
             continue
-        s = len(ch) + (need_bonus if c in need else 0) + 8 * sum(1 for i in ch if bubbles[i][4]) + obst_score(bubbles, ch)
+        s = value(bubbles, ch) + (need_bonus if c in need else 0) + 8 * sum(1 for i in ch if bubbles[i][4]) + obst_score(bubbles, ch)
         if (s, len(ch)) > best_s:
             best, best_s = ch, (s, len(ch))
     for i, b in enumerate(bubbles):              # 含火焰的短链（每色最长链里可能没有它）
         if b[4]:
             ch = longest_from(bubbles, i, neighbors(bubbles))
             if len(ch) >= 2:
-                s = len(ch) + (need_bonus if b[2] in need else 0) + 8 * sum(1 for j in ch if bubbles[j][4]) + obst_score(bubbles, ch)
+                s = value(bubbles, ch) + (need_bonus if b[2] in need else 0) + 8 * sum(1 for j in ch if bubbles[j][4]) + obst_score(bubbles, ch)
                 if (s, len(ch)) > best_s:
                     best, best_s = ch, (s, len(ch))
     return best

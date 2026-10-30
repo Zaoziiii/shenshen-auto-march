@@ -28,8 +28,10 @@ def _detect(img, bubbles):
     if len(bubbles) < 8:
         return []
     occ = np.zeros((H, W), np.uint8)
-    for x, y, *_ in bubbles:
-        cv2.circle(occ, (x, y + 15), 46, 255, -1)
+    from board import size
+    for p in bubbles:                         # 活动关泡泡大小不一：按身体缩放盖住
+        k = size(p)[0]
+        cv2.circle(occ, (p[0], p[1] + int(15 * k)), int(46 * k), 255, -1)
     pts = np.array([(x, y + 15) for x, y, *_ in bubbles], np.int32)
     hull = np.zeros((H, W), np.uint8)
     cv2.fillConvexPoly(hull, cv2.convexHull(pts), 255)

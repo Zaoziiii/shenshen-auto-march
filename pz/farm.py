@@ -71,6 +71,10 @@ def main(cfg):
     win = lose = unknown = 0
     drops = {}
     play.board.THRESH = 0.55
+    event = stage.strip().lower() in nav.EVENT_STAGES     # 活动关：小/中/大泡泡 1/3/5 分，乱舞留首领色，耗活动票
+    play.board.SCALES = play.board.EVENT_SCALES if event else (1.0,)
+    if event:
+        log('活动模式：按分值连线（小 1 / 中 3 / 大 5），乱舞保留首领颜色')
     table = chars.load_table()
     k = 0
     nav_failed = False
@@ -101,9 +105,13 @@ def main(cfg):
         img = play.shot()
         in_battle = (len(play.board.detect(img)) >= 25 or play.is_rush(img) or play.is_aim_screen(img)
                      or play.is_result(img) or play.is_continue_dialog(img) or play.is_retreat_dialog(img))
+        if in_battle and event:
+            # 活动首页（橙色「挑戦」+ 米色小路）颜色上像结算页：用文字再确认一次
+            t = nav.ocr(img)
+            in_battle = not (nav.find(t, '挑戦') and nav.find(t, '報酬リスト')) and not nav.is_event_battle_page(t)
         if in_battle:
             keep = cfg.get('keep') or 'auto'
-            keep = 'red' if keep == 'auto' else keep        # 中途接手读不到队伍卡片，自动模式先按红色
+            keep = 'boss' if event else 'red' if keep == 'auto' else keep        # 中途接手读不到队伍卡片，自动模式先按红色
             log(f'检测到正在对战中，先接着打完这一局（乱舞留 {keep}）')
             play.RESULT_IMGS.clear()
             t_round[0] = time.time()
@@ -112,15 +120,18 @@ def main(cfg):
             time.sleep(2)
         while True:
             play.mark()
-            if not nav.goto_team_select(stage, team_sel):
+            if not (nav.goto_event(team_sel) if event else nav.goto_team_select(stage, team_sel)):
                 log('走不到关卡', stage, '（或找不到队伍）'); nav_failed = True; break
             img = play.shot()
             team = chars.identify(img, table)
             play.TEAM = team
             keep = cfg.get('keep') or 'auto'
-            keep = auto_keep(team) if keep == 'auto' else keep
+            keep = 'boss' if event else auto_keep(team) if keep == 'auto' else keep
             done = count > 0 and k >= count          # 指定次数已经刷够
-            if nav.hearts(img) == 0:
+            left = nav.tickets(img) if event else nav.hearts(img)
+            if event and (left == 0 or done):
+                log('活动票用完了，结束' if left == 0 else f'已刷够 {count} 次，结束'); break
+            if not event and left == 0:
                 if done:
                     log(f'已刷够 {count} 次，心也用完了，结束'); break
                 if count == 0 or heart_out == 'stop':
@@ -131,10 +142,10 @@ def main(cfg):
                     if nav.buy_hearts():
                         continue
                     log('补充体力失败，停止'); nav_failed = True; break
-            if done and k == count:
+            if done and k == count and not event:
                 log(f'已刷够 {count} 次，还有 {nav.hearts(img)} 颗心，继续刷完心再结束')
             k += 1
-            log(f'=== 第 {k} 局 {stage}  队伍：{"、".join(c.get("name", "?") for c in team)}  乱舞留 {keep}  （剩 {nav.hearts(img)} 颗心）')
+            log(f'=== 第 {k} 局 {stage}  队伍：{"、".join(c.get("name", "?") for c in team)}  乱舞留 {keep}  （剩 {left} {"张票" if event else "颗心"}）')
             save_status(running=True, stage=stage, round=k, win=win, lose=lose, unknown=unknown, drops=drops, team=[c.get('name') for c in team])
             play.RESULT_IMGS.clear()
             t_round[0] = time.time()
