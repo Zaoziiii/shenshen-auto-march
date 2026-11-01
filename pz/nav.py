@@ -179,6 +179,10 @@ def goto_team_select(stage, team=None):
                 shift = 450                                          # 一个都没看到：往前翻
             slow_pan(max(-520, min(520, shift)))
             time.sleep(1); continue
+        if resume_dialog(t):                       # 上一局没打完 → 再開する，交给 farm 接着打
+            do_resume(t); return 'resume'
+        if server_error(t):
+            log('服务器通信错误，点「はい」'); play.tap(*server_error(t)); time.sleep(4); continue
         if day_changed(t):                         # 换天：「日付が変わりました。絵巻船に戻ります。」→ はい
             log('换天了，点「はい」回绘卷船'); play.tap(*day_changed(t)); time.sleep(5); continue
         # 「通信エラーが発生しました。」（タイトルへ / リトライ）：先リトライ，3 次不行回标题页
@@ -206,6 +210,29 @@ def goto_team_select(stage, team=None):
     cv2.imwrite(str(ROOT / 'refs' / f'nav_fail_{int(time.time())}.png'), img)
     log('导航失败，最后的画面存到了 refs/nav_fail_*.png，识别到的文字：', ' / '.join(w for _, _, w in t[:8]))
     return False
+
+
+def resume_dialog(t):
+    """重开游戏时上一局没打完：「中断データがあります / 挑戦中の戦闘を再開しますか？」（撤退する / 再開する）
+    → 返回「再開する」的位置（票 / 心已经花了，接着打）"""
+    if find(t, '中断データ') or find(t, '戦闘を再開'):
+        return find(t, '再開する') or (494, 1339)
+
+
+def do_resume(t):
+    """点「再開する」。用户 2026-11-01：要点两次 —— 点完再看几次，弹窗还在（或又弹一次）就再点，最多 4 次"""
+    for i in range(4):
+        log(f'有没打完的战斗，点「再開する」接着打（第 {i + 1} 次）')
+        play.tap(*resume_dialog(t)); time.sleep(3)
+        t = ocr(play._shot())
+        if not resume_dialog(t):
+            time.sleep(3); return
+
+
+def server_error(t):
+    """「ゲームサーバーとの通信中にエラーが発生しました。（2-103）」只有「はい」→ 返回它的位置"""
+    if find(t, '通信中にエラー') or find(t, 'エラーが発生'):
+        return next(((x, y) for x, y, w in t if w.strip() == 'はい'), None)
 
 
 # ---------- 活动（大討伐 BIG ト餓鬼）----------
@@ -241,6 +268,10 @@ def goto_event(team=None):
             play.tap(*find(t, '挑戦')); time.sleep(3); continue
         if find(t, 'コンティニュー確認') or find(t, '撤退確認'):
             play.give_up(); continue
+        if resume_dialog(t):                       # 上一局没打完 → 再開する，交给 farm 接着打
+            do_resume(t); return 'resume'
+        if server_error(t):
+            log('服务器通信错误，点「はい」'); play.tap(*server_error(t)); time.sleep(4); continue
         if day_changed(t):
             log('换天了，点「はい」'); play.tap(*day_changed(t)); time.sleep(5); continue
         if find(t, '日報の確認'):

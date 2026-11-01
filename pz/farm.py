@@ -35,7 +35,10 @@ def wait_for_heart(stage, team):
     while True:
         for _ in range(18):
             play.check_stop(); time.sleep(10)
-        if nav.goto_team_select(stage, team) and nav.hearts(play.shot()) > 0:
+        got = nav.goto_team_select(stage, team)
+        if got == 'resume':                          # 等心期间游戏被重开、还有没打完的一局 → 先打完
+            play.run(prefer=('red',)); continue
+        if got and nav.hearts(play.shot()) > 0:
             return True
 
 
@@ -124,8 +127,19 @@ def main(cfg):
             time.sleep(2)
         while True:
             play.mark()
-            if not (nav.goto_event(team_sel) if event else nav.goto_team_select(stage, team_sel)):
+            got = nav.goto_event(team_sel) if event else nav.goto_team_select(stage, team_sel)
+            if not got:
                 log('走不到关卡', stage, '（或找不到队伍）'); nav_failed = True; break
+            if got == 'resume':                      # 重开游戏弹「中断データがあります」→ 已点再開する，接着打完这一局
+                keep = cfg.get('keep') or 'auto'
+                keep = 'boss' if event else 'red' if keep == 'auto' else keep        # 读不到队伍卡片，自动模式先按红色
+                k += 1
+                log(f'=== 第 {k} 局（接着打没打完的那一局）  乱舞留 {keep}')
+                play.RESULT_IMGS.clear()
+                t_round[0] = time.time()
+                tally(play.run(prefer=(keep,)), f'第 {k} 局（接着打）')
+                time.sleep(2)
+                continue
             img = play.shot()
             team = chars.identify(img, table)
             play.TEAM = team
