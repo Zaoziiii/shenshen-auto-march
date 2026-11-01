@@ -369,16 +369,21 @@ RUSH_ORDER = ('yellow', 'blue', 'green')   # 乱舞扫色顺序（保留色跳�
 RUSH_X = (40, 668)                         # 横扫的左右边界（截图像素）
 RUSH_TOP = 470                             # 扫到这里为止
 RUSH_ROW = 85                              # 每一趟往上移多少（略小于泡泡直径 ~90，避免漏）
+RUSH_BOTTOM = 1080                         # 盘面最底下一行（最低的泡泡眼睛约 1065；再往下是角色）
 
 
 def zigzag_sweep(x0, y0, conn=None, bottom=None):
     """用户定的乱舞扫法：按住起点 → 横着来回滑，一路往上扫到顶 → 松开。
     乱舞时只收集和第一个泡泡同色的，划过别的颜色没关系，所以不用识别位置。
-    bottom：起点不在最下面时（为了避开会往下掉的泡泡），按住后先拖到最底下一行，再从底往上扫，下面几行不漏"""
+    bottom：用户 2026-11-01「乱舞从底部开始画」—— 按住起点后先拖到盘面最底下一行，
+    沿底行先到近的一边、再整行扫到另一边，然后一趟趟往上，底下几行不漏"""
     pts = [(x0, y0)]
-    if bottom and bottom > y0 + RUSH_ROW / 2:
-        pts.append((x0, bottom)); y0 = bottom
-    y = y0; go_right = x0 < (RUSH_X[0] + RUSH_X[1]) / 2
+    go_right = x0 < (RUSH_X[0] + RUSH_X[1]) / 2
+    if bottom:
+        y0 = max(y0, bottom)
+        near = RUSH_X[0] if go_right else RUSH_X[1]   # go_right=起点在左半边 → 近的是左边
+        pts += [(x0, y0), (near, y0)]            # 底行：起点 → 近的一边（下面一笔再整行扫到远的一边）
+    y = y0
     while True:
         pts.append((RUSH_X[1] if go_right else RUSH_X[0], y))
         if y <= RUSH_TOP:
@@ -471,7 +476,7 @@ def rush_phase(keep, n, img=None):
         k += 1
         t_first = t_first or time.time()
         print(f'{time.time():.1f}', n, f'rush sweep {c} from ({x},{y})  counts {counts}', flush=True)
-        bottom = max((p[1] for p in b), default=y) + 20        # 盘面最下面一行（眼睛 +20 是身体）
+        bottom = RUSH_BOTTOM                                   # 每一笔都从盘面最底下开始往上画
         th = threading.Thread(target=zigzag_sweep, args=(x, y + 10, None, bottom), daemon=True)
         th.start()
         time.sleep(0.15)                         # 等这一笔真正按下去、颜色开始被选中
