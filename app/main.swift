@@ -102,7 +102,9 @@ struct ContentView: View {
     @StateObject var r = Runner()
     @AppStorage("device") var device = "iphone"
     @AppStorage("stage") var stage = "3-29"
-    @AppStorage("event") var event = false          // 刷活动「大讨伐」（固定按钮，不用手填关卡）
+    @AppStorage("kind") var kind = "normal"         // 刷什么：normal 普通关卡 / event 大讨伐活动 / scenario 活动（地獄めぐり）
+    @AppStorage("scenarioStage") var scenarioStage = "3-2"   // scenario 的关卡单独记，不和普通关卡混
+    var event: Bool { kind == "event" }
     @AppStorage("team") var team = ""
     @AppStorage("keep") var keep = "auto"
     @AppStorage("mode") var mode = 0
@@ -118,12 +120,15 @@ struct ContentView: View {
                 Picker("设备", selection: $device) {
                     Text("iPhone 镜像").tag("iphone"); Text("BlueStacks Air").tag("bluestacks")
                 }.pickerStyle(.segmented)
-                Picker("刷什么", selection: $event) {
-                    Text("普通关卡").tag(false); Text("大讨伐活动").tag(true)
+                Picker("刷什么", selection: $kind) {
+                    Text("普通关卡").tag("normal"); Text("大讨伐活动").tag("event"); Text("scenario").tag("scenario")
                 }.pickerStyle(.segmented)
-                    .help("大讨伐活动：按泡泡分值连线（小 1 / 中 3 / 大 5）、乱舞保留首领颜色、用活动票（不补充）")
-                if !event {
+                    .help("大讨伐活动：按泡泡分值连线、乱舞保留首领颜色、用活动票。scenario：地獄めぐり活动，关卡没解锁时先按顺序推（剧情自动跳过）")
+                if kind == "normal" {
                     TextField("关卡（章-话）", text: $stage).help("例如 3-29")
+                }
+                if kind == "scenario" {
+                    TextField("关卡（地图-关）", text: $scenarioStage).help("例如 3-2。还没解锁的话，先一关一关推过去（剧情小关自动跳过），解锁后就一直刷这一关")
                 }
                 TextField("队伍（队名或 1~5，空=当前队）", text: $team)
                 if !event {
@@ -150,7 +155,8 @@ struct ContentView: View {
             }
             HStack {
                 Button(r.running ? "运行中…" : "开始") {
-                    r.start(["device": device, "stage": event ? "大讨伐" : stage, "team": team, "keep": keep,
+                    r.start(["device": device, "stage": event ? "大讨伐" : kind == "scenario" ? scenarioStage : stage, "kind": kind,
+                             "team": team, "keep": keep,
                              "count": mode == 1 ? count : 0, "heart_out": mode == 1 ? heartOut : "stop", "close_game": closeGame,
                              "delay_min": delayH * 60, "repeat_min": repeatH * 60])
                 }.disabled(r.running).keyboardShortcut(.return)

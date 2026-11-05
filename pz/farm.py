@@ -1,7 +1,8 @@
 """刷关主程序（UI 调用它）。
 python pz/farm.py config.json
 config: {"stage": "3-29", "team": "Trans" 或 "1", "keep": "auto"/"red"/..., 
-         "count": 0(=刷到心用完) 或 N, "heart_out": "stop"/"wait"/"buy"}"""
+         "count": 0(=刷到心用完) 或 N, "heart_out": "stop"/"wait"/"buy",
+         "kind": "scenario"（活动地獄めぐり，stage 写 "3-2"）/ 不写 = 普通关}"""
 import re
 import json, sys, time
 from pathlib import Path
@@ -30,12 +31,12 @@ def save_status(**kw):
     STATUS.write_text(json.dumps(kw, ensure_ascii=False, indent=1))
 
 
-def wait_for_heart(stage, team):
+def wait_for_heart(goto):
     log('心用完了，等心恢复（每 3 分钟看一次）…')
     while True:
         for _ in range(18):
             play.check_stop(); time.sleep(10)
-        got = nav.goto_team_select(stage, team)
+        got = goto()
         if got == 'resume':                          # 等心期间游戏被重开、还有没打完的一局 → 先打完
             play.run(prefer=('red',)); continue
         if got and nav.hearts(play.shot()) > 0:
@@ -79,6 +80,14 @@ def main(cfg):
     play.board.SCALES = play.board.EVENT_SCALES if event else (1.0,)
     if event:
         log('活动模式：按分值连线（小 1 / 中 3 / 大 5），乱舞保留首领颜色')
+    story = cfg.get('kind') == 'scenario'   # scenario 活动（地獄めぐり）：关卡写「地图-关」如 3-2，打法和耗心都和普通关一样；
+    if story:                               # 目标关没解锁时先按顺序推（剧情小关自动跳过）
+        log(f'scenario 活动（地獄めぐり）{stage}')
+
+    def goto():
+        if event:
+            return nav.goto_event(team_sel)
+        return nav.goto_story(stage, team_sel) if story else nav.goto_team_select(stage, team_sel)
     table = chars.load_table()
     k = 0
     nav_failed = False
@@ -127,9 +136,11 @@ def main(cfg):
             time.sleep(2)
         while True:
             play.mark()
-            got = nav.goto_event(team_sel) if event else nav.goto_team_select(stage, team_sel)
+            got = goto()
             if not got:
                 log('走不到关卡', stage, '（或找不到队伍）'); nav_failed = True; break
+            if got == 'done':
+                log('scenario 能推的关都推完了，目标关还没解锁，结束'); break
             if got == 'resume':                      # 重开游戏弹「中断データがあります」→ 已点再開する，接着打完这一局
                 keep = cfg.get('keep') or 'auto'
                 keep = 'boss' if event else 'red' if keep == 'auto' else keep        # 读不到队伍卡片，自动模式先按红色
@@ -155,7 +166,7 @@ def main(cfg):
                 if count == 0 or heart_out == 'stop':
                     log('心用完了，停止'); break
                 if heart_out == 'wait':
-                    wait_for_heart(stage, team_sel); continue
+                    wait_for_heart(goto); continue
                 if heart_out == 'buy':
                     if nav.buy_hearts():
                         continue

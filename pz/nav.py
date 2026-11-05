@@ -282,7 +282,8 @@ def goto_event(team=None):
             play.shot(); time.sleep(1); continue
         # 主页点「イベント」弹出的活动列表（标题「イベント」在 y≈423）→ 用户：点第一个活动
         if any(w.strip() == 'イベント' and 400 <= y <= 445 for x, y, w in t) and find(t, 'とじる'):
-            log('活动列表，点第一个活动'); play.tap(355, 545); time.sleep(3.5); continue
+            pos = find(t, '大討伐')                  # 现在列表里不一定是第一个（2026-11 地獄めぐり排在前面）
+            log('活动列表，点「大討伐」'); play.tap(355, pos[1] + 40 if pos else 545); time.sleep(3.5); continue
         btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
         if btn:
             log('关闭弹窗：', ' / '.join(w for _, _, w in t[:4]))
@@ -294,6 +295,165 @@ def goto_event(team=None):
         time.sleep(2)
     cv2.imwrite(str(ROOT / 'refs' / f'nav_fail_{int(time.time())}.png'), img)
     log('走不到活动挑战页，最后的画面存到了 refs/nav_fail_*.png，识别到的文字：', ' / '.join(w for _, _, w in t[:8]))
+    return False
+
+
+# ---------- 剧情活动（シナリオ「むかしばなし 地獄めぐり」2026-11）----------
+# 结构：活动首页是章节列表（0~6，每行右边「読む / 挑戦」）→ 点「挑戦」进这一章的小地图（X-1 ~ X-5，X-1 是剧情）
+# → 点关卡 →「決定」→ 队伍页（左上写「X-2」，「戦う」扣 1 颗心，和普通关一样）
+STORY_KEYS = ('むかしばなし', '地獄')
+STORY_ROW_Y = 558                  # 章节列表第 0 行「読む/挑戦」按钮的 y，每行往下 111
+
+
+def _stage_label(t, ch, no=None):
+    """小地图 / 队伍页上的关卡标签「X-Y」（OCR 有时带前缀「｜ 」）→ [(x, y, 第几关)]"""
+    out = []
+    for x, y, w in t:
+        m = re.search(rf'(?<!\d){ch}\s*-\s*(\d)(?!\d)', w)
+        if m and (no is None or int(m.group(1)) == int(no)):
+            out.append((x, y, int(m.group(1))))
+    return out
+
+
+def _story_banner(t):
+    """小地图 / 队伍页左上绿条「3：スパリゾート血の池」→ 章号；不是就 None"""
+    for x, y, w in t:
+        m = re.match(r'\s*(\d)\s*[：:]', w)
+        if m and 300 <= y <= 380:
+            return int(m.group(1))
+    return None
+
+
+_SKIP = None
+
+
+def story_skip_btn(img):
+    """剧情画面右上角的 ▶| 跳过按钮 → 位置；不是剧情画面就 None"""
+    global _SKIP
+    if _SKIP is None:
+        _SKIP = cv2.imread(str(Path(__file__).parent / 'story_skip.png'))
+    r = cv2.matchTemplate(img[200:330, 560:708], _SKIP, cv2.TM_CCOEFF_NORMED)
+    _, mv, _, ml = cv2.minMaxLoc(r)
+    return (ml[0] + 560 + _SKIP.shape[1] // 2, ml[1] + 200 + _SKIP.shape[0] // 2) if mv > 0.8 else None
+
+
+def _map_nodes(img):
+    """小地图上看得到的关卡 → {第几关: (圆台 x, y, 解锁了没)}。标签字小，放大 2 倍再认；
+    锁着的圆台是灰的（亮度 ~133），解锁的是米色（≥190）"""
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    out = {}
+    for x, y, w in ocr(cv2.resize(img[440:700], None, fx=2, fy=2)):
+        m = re.search(r'(\d)\s*-\s*(\d)(?!\d)', w)
+        if m:
+            x, y = x // 2, y // 2 + 440 - 55                    # 标签上方 55px 是圆台
+            out[int(m.group(2))] = (x, y, int(np.median(hsv[y - 20:y + 10, x - 40:x + 40, 2])) > 165)
+    return out
+
+
+def _chapter_rows(img, t):
+    """章节列表 → [(章号, 按钮 y, 已达成, 锁着)]（0~6 行，每行 111px）"""
+    stamps = [y for x, y, w in t if '達成' in w and x < 150]
+    stamps += [y // 2 + 480 for x, y, w in ocr(cv2.resize(img[480:1260, 40:150], None, fx=2, fy=2)) if '達' in w or '成' in w]
+    rows = []
+    for i in range(7):
+        by = STORY_ROW_Y + 111 * i
+        locked = any('開放' in w and abs(y - by) < 40 for x, y, w in t)
+        rows.append((i, by, any(by - 60 < y < by + 10 for y in stamps), locked))
+    return rows
+
+
+def goto_story(stage, team=None):
+    """走到 scenario 活动某一关（如 "3-2"）的队伍页，可选切换队伍。
+    用户 2026-11-05：目标关还没解锁 → 按顺序一关一关推（剧情小关点「読む」→ 右上角跳过），
+    这时返回的是「下一个要推的战斗关」的队伍页；目标关解锁后就一直刷目标关。"""
+    ch, no = (int(v) for v in stage.split('-'))
+    want = None                                   # 这次要进的关（目标关，或者推图时的下一关）
+    for _ in range(40):
+        img = play.shot(); t = ocr(img)
+        if find(t, '戦う') or (find(t, 'おすすめ') and find(t, '有利刀種')):       # 队伍页（「戦う」偶尔认不出）
+            here = [f'{c}-{n}' for x, y, w in t if y < 420 for m in [re.search(r'(\d)\s*-\s*(\d)(?!\d)', w)] if m
+                    for c, n in [m.groups()]]
+            if want and want in here:
+                if team:
+                    got = select_team(team)
+                    if got is None:
+                        log('找不到队伍', team); return False
+                    log('队伍:', got)
+                if want != stage:
+                    log(f'目标关 {stage} 还没解锁，先推 {want}')
+                return True
+            play.tap(111, 1363); time.sleep(2); continue                        # 别的关的队伍页 → とじる，回地图重新选
+        if resume_dialog(t):
+            do_resume(t); return 'resume'
+        if find(t, 'スキップしますか'):                                        # 跳过剧情的确认 → はい
+            play.tap(*next(((x, y) for x, y, w in t if w.strip() == 'はい'), (504, 1337))); time.sleep(4); continue
+        if story_skip_btn(img):                                                 # 剧情画面 → 右上角跳过
+            log('剧情，点右上角跳过'); play.tap(*story_skip_btn(img)); time.sleep(2); continue
+        if server_error(t):
+            log('服务器通信错误，点「はい」'); play.tap(*server_error(t)); time.sleep(4); continue
+        if find(t, 'コンティニュー確認') or find(t, '撤退確認'):
+            play.give_up(); continue
+        if day_changed(t):
+            log('换天了，点「はい」'); play.tap(*day_changed(t)); time.sleep(5); continue
+        if find(t, '日報の確認'):
+            play.tap(355, 950); time.sleep(3); continue
+        if find(t, '通信エラー') and find(t, 'リトライ'):
+            play.shot(); time.sleep(1); continue
+        if find(t, '次へ'):
+            play.tap(*find(t, '次へ')); time.sleep(3); continue
+        cur = _story_banner(t)
+        if find(t, 'もどる') and cur is not None:                              # 某一章的小地图
+            nodes = _map_nodes(img)
+            if cur == ch and nodes.get(no, (0, 0, False))[2]:
+                pick = no                                                       # 目标关已解锁 → 就打它
+            else:
+                if cur != ch and want is None:                                  # 不是要去的章、也不是在推这一章
+                    play.tap(176, 1349); time.sleep(3); continue
+                opened = [n for n, v in nodes.items() if v[2]]
+                locked = [n for n, v in nodes.items() if not v[2]]
+                if locked and opened and max(opened) < min(locked):
+                    pick = max(opened)                                          # 推图：最后一个解锁的就是还没打过的
+                elif cur == ch and opened and no < min(opened):
+                    pick = None                                                 # 目标在左边，往回拖
+                else:
+                    pick = None if 5 not in nodes else 5
+            if pick is None or pick not in nodes:
+                seen = list(nodes) or [0]
+                slow_pan(450 if pick is None and cur == ch and no < min(seen) else -450); time.sleep(1); continue
+            x, y, _ = nodes[pick]
+            want = f'{cur}-{pick}'
+            play.tap(x, y); time.sleep(1.5)
+            t2 = ocr(play.shot())
+            if find(t2, '決定'):
+                play.tap(*find(t2, '決定')); time.sleep(3.5)
+            elif find(t2, '読む'):
+                log(f'{want} 是剧情，点「読む」'); play.tap(*find(t2, '読む')); time.sleep(4)
+            continue
+        if any(find(t, k) for k in STORY_KEYS) and find(t, '挑戦'):           # 活动首页（章节列表）
+            rows = _chapter_rows(img, t)
+            if not rows[ch][3]:
+                want = None; play.tap(553, rows[ch][1]); time.sleep(4); continue    # 目标章开着 → 进去
+            todo = [r for r in rows if not r[2] and not r[3]]
+            if not todo:
+                log('scenario 能推的都推完了，但目标章', ch, '还没解锁'); return 'done'
+            i, by = todo[0][:2]
+            log(f'目标章 {ch} 还没解锁，先推第 {i} 章')
+            want = f'{i}-?'; play.tap(553, by); time.sleep(4); continue
+        # 主页「イベント」弹出的活动列表 → 点 scenario（むかしばなし 地獄めぐり）那一项
+        if any(w.strip() == 'イベント' and 400 <= y <= 445 for x, y, w in t) and find(t, 'とじる'):
+            pos = next((find(t, k) for k in STORY_KEYS if find(t, k)), None)
+            log('活动列表，点「地獄めぐり」'); play.tap(355, pos[1] if pos else 545); time.sleep(4); continue
+        btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
+        if btn:
+            log('关闭弹窗：', ' / '.join(w for _, _, w in t[:4]))
+            play.tap(*btn); time.sleep(2); continue
+        if find(t, '召喚') or find(t, '戦支度') or find(t, 'よろず屋'):       # 主页 → 左下「イベント」
+            play.tap(82, 1240); time.sleep(4); continue
+        if find(t, 'はじめる'):
+            play.tap(*find(t, 'はじめる')); time.sleep(8); continue
+        time.sleep(2)
+    cv2.imwrite(str(ROOT / 'refs' / f'nav_fail_{int(time.time())}.png'), img)
+    log('走不到活动关卡', stage, '，最后的画面存到了 refs/nav_fail_*.png，识别到的文字：', ' / '.join(w for _, _, w in t[:8]))
     return False
 
 
