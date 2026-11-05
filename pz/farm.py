@@ -81,8 +81,9 @@ def main(cfg):
     if event:
         log('活动模式：按分值连线（小 1 / 中 3 / 大 5），乱舞保留首领颜色')
     story = cfg.get('kind') == 'scenario'   # scenario 活动（地獄めぐり）：关卡写「地图-关」如 3-2，打法和耗心都和普通关一样；
+    unlock_all = story and stage == 'all'   # 刷关方式「顺序解锁所有关卡」：一直推到没有能推的关
     if story:                               # 目标关没解锁时先按顺序推（剧情小关自动跳过）
-        log(f'scenario 活动（地獄めぐり）{stage}')
+        log('scenario 活动（地獄めぐり）' + ('：顺序解锁所有关卡' if unlock_all else stage))
 
     def goto():
         if event:
@@ -140,7 +141,7 @@ def main(cfg):
             if not got:
                 log('走不到关卡', stage, '（或找不到队伍）'); nav_failed = True; break
             if got == 'done':
-                log('scenario 能推的关都推完了，目标关还没解锁，结束'); break
+                log('所有关卡都解锁了，结束' if unlock_all else 'scenario 能推的关都推完了，目标关还没解锁，结束'); break
             if got == 'resume':                      # 重开游戏弹「中断データがあります」→ 已点再開する，接着打完这一局
                 keep = cfg.get('keep') or 'auto'
                 keep = 'boss' if event else 'red' if keep == 'auto' else keep        # 读不到队伍卡片，自动模式先按红色
@@ -163,7 +164,7 @@ def main(cfg):
             if not event and left == 0:
                 if done:
                     log(f'已刷够 {count} 次，心也用完了，结束'); break
-                if count == 0 or heart_out == 'stop':
+                if (count == 0 and not unlock_all) or heart_out == 'stop':
                     log('心用完了，停止'); break
                 if heart_out == 'wait':
                     wait_for_heart(goto); continue
@@ -174,7 +175,7 @@ def main(cfg):
             if done and k == count and not event:
                 log(f'已刷够 {count} 次，还有 {nav.hearts(img)} 颗心，继续刷完心再结束')
             k += 1
-            log(f'=== 第 {k} 局 {stage}  队伍：{"、".join(c.get("name", "?") for c in team)}  乱舞留 {keep}  （剩 {left} {"张票" if event else "颗心"}）')
+            log(f'=== 第 {k} 局 {nav.STORY_AT if story else stage}  队伍：{"、".join(c.get("name", "?") for c in team)}  乱舞留 {keep}  （剩 {left} {"张票" if event else "颗心"}）')
             save_status(running=True, stage=stage, round=k, win=win, lose=lose, unknown=unknown, drops=drops, team=[c.get('name') for c in team])
             play.RESULT_IMGS.clear()
             t_round[0] = time.time()

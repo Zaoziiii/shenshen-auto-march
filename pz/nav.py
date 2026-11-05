@@ -325,6 +325,7 @@ def _story_banner(t):
 
 
 _SKIP = None
+STORY_AT = None                    # goto_story 最后进的是哪一关（「3-2」）
 
 
 def story_skip_btn(img):
@@ -365,8 +366,11 @@ def _chapter_rows(img, t):
 def goto_story(stage, team=None):
     """走到 scenario 活动某一关（如 "3-2"）的队伍页，可选切换队伍。
     用户 2026-11-05：目标关还没解锁 → 按顺序一关一关推（剧情小关点「読む」→ 右上角跳过），
-    这时返回的是「下一个要推的战斗关」的队伍页；目标关解锁后就一直刷目标关。"""
-    ch, no = (int(v) for v in stage.split('-'))
+    这时返回的是「下一个要推的战斗关」的队伍页；目标关解锁后就一直刷目标关。
+    stage == 'all'：用户「顺序解锁所有关卡」—— 没有目标关，一直推到没有能推的，返回 'done'。
+    进到哪一关记在 STORY_AT（farm 写日志用）"""
+    global STORY_AT
+    ch, no = (None, None) if stage == 'all' else (int(v) for v in stage.split('-'))
     want = None                                   # 这次要进的关（目标关，或者推图时的下一关）
     for _ in range(40):
         img = play.shot(); t = ocr(img)
@@ -380,7 +384,8 @@ def goto_story(stage, team=None):
                         log('找不到队伍', team); return False
                     log('队伍:', got)
                 if want != stage:
-                    log(f'目标关 {stage} 还没解锁，先推 {want}')
+                    log(f'推图：{want}' if ch is None else f'目标关 {stage} 还没解锁，先推 {want}')
+                STORY_AT = want
                 return True
             play.tap(111, 1363); time.sleep(2); continue                        # 别的关的队伍页 → とじる，回地图重新选
         if resume_dialog(t):
@@ -431,13 +436,13 @@ def goto_story(stage, team=None):
             continue
         if any(find(t, k) for k in STORY_KEYS) and find(t, '挑戦'):           # 活动首页（章节列表）
             rows = _chapter_rows(img, t)
-            if not rows[ch][3]:
+            if ch is not None and not rows[ch][3]:
                 want = None; play.tap(553, rows[ch][1]); time.sleep(4); continue    # 目标章开着 → 进去
             todo = [r for r in rows if not r[2] and not r[3]]
             if not todo:
-                log('scenario 能推的都推完了，但目标章', ch, '还没解锁'); return 'done'
+                log('scenario 能推的都推完了' + ('' if ch is None else f'，但目标章 {ch} 还没解锁')); return 'done'
             i, by = todo[0][:2]
-            log(f'目标章 {ch} 还没解锁，先推第 {i} 章')
+            log(f'推第 {i} 章' if ch is None else f'目标章 {ch} 还没解锁，先推第 {i} 章')
             want = f'{i}-?'; play.tap(553, by); time.sleep(4); continue
         # 主页「イベント」弹出的活动列表 → 点 scenario（むかしばなし 地獄めぐり）那一项
         if any(w.strip() == 'イベント' and 400 <= y <= 445 for x, y, w in t) and find(t, 'とじる'):

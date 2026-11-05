@@ -447,8 +447,15 @@ def rush_pick(b, keep, img, removing=None, rem_pts=()):
         if p[2] != keep and p[2] != removing:
             counts[p[2]] = counts.get(p[2], 0) + 1
     rem = list(rem_pts) + [p[:2] for p in b if p[2] == removing]
-    for c in sorted(counts, key=counts.get, reverse=True):
-        st = stable_start(b, c, keep, img, True, rem) or stable_start(b, c, keep, img, False, rem)
+    order = sorted(counts, key=counts.get, reverse=True)
+    starts = [(c, stable_start(b, c, keep, img, True, rem) or stable_start(b, c, keep, img, False, rem)) for c in order]
+    # 用户 2026-11-05：乱舞要从底往上画，不要从中途开始 → 起点必须在最底下一行（数量多的颜色先试），
+    # 哪种颜色在底行都找不到合适的起点，才退回原来的选法（数量最多、最下面的那个）
+    low = max((p[1] for p in b), default=0)
+    for c, st in starts:
+        if st and st[1] >= low - RUSH_ROW * 0.7:
+            return c, st[0], st[1], counts
+    for c, st in starts:
         if st:
             return c, st[0], st[1], counts
     return None

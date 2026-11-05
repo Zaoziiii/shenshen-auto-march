@@ -127,7 +127,7 @@ struct ContentView: View {
                 if kind == "normal" {
                     TextField("关卡（章-话）", text: $stage).help("例如 3-29")
                 }
-                if kind == "scenario" {
+                if kind == "scenario" && mode != 2 {
                     TextField("关卡（地图-关）", text: $scenarioStage).help("例如 3-2。还没解锁的话，先一关一关推过去（剧情小关自动跳过），解锁后就一直刷这一关")
                 }
                 TextField("队伍（队名或 1~5，空=当前队）", text: $team)
@@ -138,13 +138,22 @@ struct ContentView: View {
                 } else {
                     Text("乱舞保留色：自动（首领的颜色）").foregroundStyle(.secondary)
                 }
-                Picker("刷关方式", selection: $mode) { Text(event ? "刷到活动票用完" : "刷到心用完").tag(0); Text("刷够指定次数").tag(1) }
+                Picker("刷关方式", selection: $mode) {
+                    Text(event ? "刷到活动票用完" : "刷到心用完").tag(0); Text("刷够指定次数").tag(1)
+                    if kind == "scenario" { Text("顺序解锁所有关卡").tag(2) }
+                }
                     .pickerStyle(.segmented)
+                    .onChange(of: kind) { if kind != "scenario" && mode == 2 { mode = 0 } }
+                if mode == 2 && kind == "scenario" {
+                    Text("从第一个没打过的关开始一关一关推（剧情小关自动跳过），全部解锁后停止").font(.caption).foregroundStyle(.secondary)
+                }
                 if mode == 1 && event {
                     Stepper("次数：\(count)（票先用完也会停）", value: $count, in: 1...999)
                 }
                 if mode == 1 && !event {
                     Stepper("次数：\(count)", value: $count, in: 1...999)
+                }
+                if (mode == 1 && !event) || (mode == 2 && kind == "scenario") {
                     Picker("心用完后", selection: $heartOut) {
                         Text("停止").tag("stop"); Text("等心恢复").tag("wait"); Text("用 50 宝玉补充 10 颗心").tag("buy")
                     }
@@ -155,9 +164,10 @@ struct ContentView: View {
             }
             HStack {
                 Button(r.running ? "运行中…" : "开始") {
-                    r.start(["device": device, "stage": event ? "大讨伐" : kind == "scenario" ? scenarioStage : stage, "kind": kind,
+                    let unlockAll = kind == "scenario" && mode == 2
+                    r.start(["device": device, "stage": event ? "大讨伐" : unlockAll ? "all" : kind == "scenario" ? scenarioStage : stage, "kind": kind,
                              "team": team, "keep": keep,
-                             "count": mode == 1 ? count : 0, "heart_out": mode == 1 ? heartOut : "stop", "close_game": closeGame,
+                             "count": mode == 1 ? count : 0, "heart_out": mode != 0 ? heartOut : "stop", "close_game": closeGame,
                              "delay_min": delayH * 60, "repeat_min": repeatH * 60])
                 }.disabled(r.running).keyboardShortcut(.return)
                 Button("停止（⌃C）") { r.stop() }.disabled(!r.running)
