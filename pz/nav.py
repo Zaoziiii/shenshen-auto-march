@@ -193,6 +193,8 @@ def goto_team_select(stage, team=None):
             log('换天后的日报提示，点卷轴'); play.tap(355, 950); time.sleep(3); continue
         # 弹窗（升级、课题达成、通知等）：点「とじる / OK / 閉じる」关掉
         btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
+        if not btn and any(w.strip() in ('獲得！', '獲得!', '獲得') for _, _, w in t):
+            btn = (352, 1339)                      # 「獲得！」奖励弹窗：とじる 在背景虚化上 OCR 常认不出（2026-11-05 卡住）
         if btn:
             log('关闭弹窗：', ' / '.join(w for _, _, w in t[:4]))
             play.tap(*btn); time.sleep(2); continue
@@ -285,6 +287,8 @@ def goto_event(team=None):
             pos = find(t, '大討伐')                  # 现在列表里不一定是第一个（2026-11 地獄めぐり排在前面）
             log('活动列表，点「大討伐」'); play.tap(355, pos[1] + 40 if pos else 545); time.sleep(3.5); continue
         btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
+        if not btn and any(w.strip() in ('獲得！', '獲得!', '獲得') for _, _, w in t):
+            btn = (352, 1339)                      # 「獲得！」奖励弹窗：とじる 在背景虚化上 OCR 常认不出（2026-11-05 卡住）
         if btn:
             log('关闭弹窗：', ' / '.join(w for _, _, w in t[:4]))
             play.tap(*btn); time.sleep(2); continue
@@ -449,6 +453,8 @@ def goto_story(stage, team=None):
             pos = next((find(t, k) for k in STORY_KEYS if find(t, k)), None)
             log('活动列表，点「地獄めぐり」'); play.tap(355, pos[1] if pos else 545); time.sleep(4); continue
         btn = next(((x, y) for x, y, w in t if w.strip() in ('とじる', 'OK', '閉じる', 'ＯＫ')), None)
+        if not btn and any(w.strip() in ('獲得！', '獲得!', '獲得') for _, _, w in t):
+            btn = (352, 1339)                      # 「獲得！」奖励弹窗：とじる 在背景虚化上 OCR 常认不出（2026-11-05 卡住）
         if btn:
             log('关闭弹窗：', ' / '.join(w for _, _, w in t[:4]))
             play.tap(*btn); time.sleep(2); continue
