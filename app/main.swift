@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 import ApplicationServices
 
-let ROOT = "/Users/tiki/Documents/Codex/2026-09-26/aalc/outputs/pazugiri"
-let PY = "/opt/anaconda3/envs/pazugiri/bin/python"
+// 这两行由 build_app.sh 编译时按本机自动替换（项目文件夹、conda 环境 pazugiri 的 python），不用手改
+let ROOT = "/path/to/pazugiri"
+let PY = "/path/to/conda/envs/pazugiri/bin/python"
 
 final class Runner: ObservableObject {
     @Published var log = ""
